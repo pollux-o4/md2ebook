@@ -1,0 +1,990 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<title>책 리더</title>
+<style>
+/* =========================================================================
+   책 리더 — 단일 파일 마크다운 e-book 템플릿
+   테마 토큰. data-theme 으로 전환. (paper / sepia / gray / black)
+   ========================================================================= */
+:root{
+  --font-sans: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Pretendard", "Noto Sans KR", "Malgun Gothic", system-ui, sans-serif;
+  --font-serif: Georgia, "Times New Roman", "Noto Serif KR", "AppleMyungjo", "Batang", serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "D2Coding", monospace;
+
+  /* 사용자 조정 (설정에서 덮어씀) */
+  --reader-font: var(--font-sans);
+  --reader-size: 18px;
+  --reader-leading: 1.9;
+
+  /* 근거 라벨 칩 */
+  --chip-fact: #2f7d55;   --chip-fact-bg: rgba(47,125,85,.12);
+  --chip-guess:#9a6b15;   --chip-guess-bg:rgba(154,107,21,.13);
+  --chip-op:   #2563a8;   --chip-op-bg:  rgba(37,99,168,.12);
+  --chip-none: #777;      --chip-none-bg:rgba(120,120,120,.13);
+
+  --dur: .22s;
+}
+
+/* ---- paper (기본) ---- */
+:root[data-theme="paper"]{
+  --bg:#e7e0d2; --page:#faf6ec; --ink:#2c2823; --ink-soft:#6a6357;
+  --rule:#e3dccd; --chrome:#f4efe4; --chrome-ink:#5a5346; --chrome-rule:#ddd5c4;
+  --accent:#9c6b3f; --code-bg:#efe8d8; --quote-rule:#cdbf9f; --sel:rgba(156,107,63,.22);
+  --page-edge:rgba(120,100,70,.18); --overlay:rgba(60,52,40,.45);
+}
+/* ---- sepia ---- */
+:root[data-theme="sepia"]{
+  --bg:#d9c7a3; --page:#ecdcbd; --ink:#43381f; --ink-soft:#7c6a48;
+  --rule:#dbcaa6; --chrome:#e4d3ad; --chrome-ink:#6a5a38; --chrome-rule:#cdb98e;
+  --accent:#9a5b2c; --code-bg:#e2cfa6; --quote-rule:#c4a877; --sel:rgba(154,91,44,.25);
+  --page-edge:rgba(120,90,40,.22); --overlay:rgba(70,55,25,.45);
+}
+/* ---- gray (warm night) ---- */
+:root[data-theme="gray"]{
+  --bg:#1c1c20; --page:#26262b; --ink:#c9c6c0; --ink-soft:#8a877f;
+  --rule:#33333a; --chrome:#212126; --chrome-ink:#9a978f; --chrome-rule:#34343b;
+  --accent:#c79b6e; --code-bg:#2e2e34; --quote-rule:#45454d; --sel:rgba(199,155,110,.25);
+  --page-edge:rgba(0,0,0,.4); --overlay:rgba(0,0,0,.6);
+  --chip-fact:#6cc295; --chip-fact-bg:rgba(108,194,149,.14);
+  --chip-guess:#d6ac5e; --chip-guess-bg:rgba(214,172,94,.14);
+  --chip-op:#6fa8df; --chip-op-bg:rgba(111,168,223,.14);
+  --chip-none:#9a978f; --chip-none-bg:rgba(154,151,143,.16);
+}
+/* ---- black (OLED) ---- */
+:root[data-theme="black"]{
+  --bg:#000; --page:#0c0c0d; --ink:#b6b4af; --ink-soft:#76746e;
+  --rule:#1f1f22; --chrome:#0a0a0b; --chrome-ink:#86847e; --chrome-rule:#1c1c1f;
+  --accent:#b8895d; --code-bg:#161617; --quote-rule:#2a2a2d; --sel:rgba(184,137,93,.28);
+  --page-edge:rgba(0,0,0,.6); --overlay:rgba(0,0,0,.7);
+  --chip-fact:#5fb98a; --chip-fact-bg:rgba(95,185,138,.14);
+  --chip-guess:#cfa455; --chip-guess-bg:rgba(207,164,85,.14);
+  --chip-op:#6aa2d8; --chip-op-bg:rgba(106,162,216,.14);
+  --chip-none:#86847e; --chip-none-bg:rgba(134,132,126,.16);
+}
+
+*{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+html,body{ margin:0; height:100%; overflow:hidden; background:var(--bg); }
+body{ font-family:var(--reader-font); color:var(--ink); }
+::selection{ background:var(--sel); }
+
+/* ============================ 리더 셸 ============================ */
+.reader{ position:fixed; inset:0; display:flex; flex-direction:column; background:var(--bg); }
+/* 가로 스와이프로 넘기는 동안에만 선택 억제 (평소엔 본문 복사 가능) */
+.reader.dragging, .reader.dragging *{ -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; }
+
+/* 상·하단 크롬 */
+.chrome{ position:absolute; left:0; right:0; z-index:40; background:var(--chrome);
+  color:var(--chrome-ink); transition:transform var(--dur) ease, opacity var(--dur) ease;
+  display:flex; align-items:center; padding:0 max(14px, env(safe-area-inset-left)); }
+.topbar{ top:0; height:54px; border-bottom:1px solid var(--chrome-rule);
+  padding-top:env(safe-area-inset-top); height:calc(54px + env(safe-area-inset-top)); }
+.botbar{ bottom:0; height:50px; border-top:1px solid var(--chrome-rule); flex-direction:column;
+  padding-bottom:env(safe-area-inset-bottom); height:calc(50px + env(safe-area-inset-bottom));
+  justify-content:center; gap:6px; }
+.reader.immersive .topbar{ transform:translateY(-110%); opacity:0; }
+.reader.immersive .botbar{ transform:translateY(110%); opacity:0; }
+
+.btn{ appearance:none; border:0; background:transparent; color:var(--chrome-ink);
+  font:inherit; cursor:pointer; padding:8px; display:inline-flex; align-items:center;
+  gap:7px; border-radius:8px; font-size:14px; line-height:1; }
+.btn:hover{ background:color-mix(in srgb, var(--chrome-ink) 10%, transparent); }
+.btn:active{ opacity:.6; }
+.btn svg{ width:19px; height:19px; stroke:currentColor; fill:none; stroke-width:1.6;
+  stroke-linecap:round; stroke-linejoin:round; }
+.topbar .doc-title{ flex:1; text-align:center; font-size:14.5px; font-weight:600;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; padding:0 8px; color:var(--chrome-ink); }
+.topbar .btn.aa{ font-size:17px; font-weight:600; }
+
+/* 진행 */
+.prog-track{ width:min(620px, 78%); height:3px; border-radius:2px;
+  background:color-mix(in srgb, var(--chrome-ink) 18%, transparent); overflow:hidden; }
+.prog-fill{ height:100%; width:0; background:var(--accent); border-radius:2px;
+  transition:width var(--dur) ease; }
+.prog-meta{ display:flex; justify-content:space-between; width:min(620px, 78%);
+  font-size:11.5px; color:var(--chrome-ink); font-variant-numeric:tabular-nums; }
+.prog-meta .chap{ max-width:62%; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; opacity:.85; }
+
+/* ============================ 무대 / 페이지 ============================ */
+.stage{ position:absolute; inset:0; perspective:2400px; perspective-origin:50% 50%;
+  overflow:hidden; touch-action:pan-y; }
+.layer{ position:absolute; inset:0; display:flex; justify-content:center;
+  will-change:transform, opacity; }
+.layer.below{ z-index:1; }
+.layer.anim{ z-index:2; display:none; }
+.layer.anim.flipping{ transform-origin:left center; }
+
+.page{ position:relative; width:100%; max-width:760px; height:100%;
+  background:var(--page); color:var(--ink); overflow:hidden;
+  box-shadow:0 0 0 1px var(--page-edge); }
+.layer.anim .page{ box-shadow:-14px 0 36px -10px var(--page-edge); }
+.page-pad{ position:absolute; inset:0; overflow:hidden;
+  padding:clamp(28px,5.2vw,64px) clamp(22px,5vw,58px);
+  padding-top:calc(54px + env(safe-area-inset-top) + clamp(8px,2vw,20px));
+  padding-bottom:calc(50px + env(safe-area-inset-bottom) + clamp(6px,1.5vw,16px)); }
+
+/* 페이지 위 음영(3D 넘김 시 페이지가 모서리로 설 때 어두워짐) */
+.page-shade{ position:absolute; inset:0; pointer-events:none; opacity:0;
+  background:linear-gradient(90deg, rgba(0,0,0,0) 55%, rgba(0,0,0,.04) 78%, rgba(0,0,0,.45) 100%); }
+
+/* 클릭 영역 */
+.tap-zones{ position:absolute; inset:0; z-index:30; display:flex; pointer-events:none; }
+.tap-zones .z{ flex:1; }
+.tap-zones .z.prev{ flex:0 0 26%; cursor:w-resize; }
+.tap-zones .z.next{ flex:0 0 26%; cursor:e-resize; }
+
+/* ============================ 읽기 타이포 ============================ */
+.page-pad{ font-size:var(--reader-size); line-height:var(--reader-leading);
+  letter-spacing:0; word-break:keep-all; overflow-wrap:break-word; text-wrap:pretty; }
+.page-pad > :first-child{ margin-top:0; }
+.page-pad > :last-child{ margin-bottom:0; }
+.page-pad h1{ font-size:1.62em; line-height:1.3; font-weight:600; margin:0 0 .5em;
+  letter-spacing:-.01em; }
+.page-pad h2{ font-size:1.3em; line-height:1.35; font-weight:600; margin:1.5em 0 .55em;
+  padding-bottom:.32em; border-bottom:1px solid var(--rule); }
+.page-pad h3{ font-size:1.08em; font-weight:600; margin:1.5em 0 .4em; color:var(--ink); }
+.page-pad p{ margin:0 0 1.05em; }
+.page-pad strong{ font-weight:600; }
+.page-pad a{ color:var(--accent); text-decoration:none; border-bottom:1px dotted var(--accent); }
+.page-pad ul,.page-pad ol{ margin:0 0 1.05em; padding-left:1.35em; }
+.page-pad li{ margin:.32em 0; }
+.page-pad li::marker{ color:var(--ink-soft); }
+.page-pad code{ font-family:var(--font-mono); font-size:.86em; background:var(--code-bg);
+  padding:.08em .42em; border-radius:4px; white-space:nowrap; }
+.page-pad pre{ background:var(--code-bg); border-radius:8px; padding:14px 16px;
+  overflow-x:auto; margin:0 0 1.15em; line-height:1.55; }
+.page-pad pre code{ background:none; padding:0; white-space:pre; font-size:.82em; }
+.page-pad blockquote{ margin:0 0 1.15em; padding:.1em 0 .1em 1.05em;
+  border-left:2px solid var(--quote-rule); color:var(--ink-soft); font-size:.96em; }
+.page-pad blockquote p{ margin:.2em 0; }
+.table-wrap{ overflow-x:auto; margin:0 0 1.2em; -webkit-overflow-scrolling:touch; }
+.page-pad table{ border-collapse:collapse; width:100%; font-size:.9em; }
+.page-pad th,.page-pad td{ border:1px solid var(--rule); padding:.5em .7em; text-align:left;
+  vertical-align:top; word-break:keep-all; }
+.page-pad th{ background:color-mix(in srgb, var(--ink) 5%, transparent); font-weight:600; }
+.page-pad hr{ border:0; border-top:1px solid var(--rule); margin:1.6em 0; }
+
+/* 근거 라벨 칩 */
+.lbl{ font-family:var(--font-sans); font-size:.74em; font-weight:600; padding:.12em .5em;
+  border-radius:4px; white-space:nowrap; letter-spacing:0; vertical-align:.04em; }
+.lbl.fact{ color:var(--chip-fact); background:var(--chip-fact-bg); }
+.lbl.guess{ color:var(--chip-guess); background:var(--chip-guess-bg); }
+.lbl.op{ color:var(--chip-op); background:var(--chip-op-bg); }
+.lbl.none{ color:var(--chip-none); background:var(--chip-none-bg); }
+/* 예약어 외 라벨: 단어 해시로 hue(--h) 자동 배정, 테마별 명도 보정 */
+.lbl.auto{ color:hsl(var(--h) 48% 34%); background:hsl(var(--h) 45% 46% / .14); }
+:root[data-theme="gray"] .lbl.auto,
+:root[data-theme="black"] .lbl.auto{ color:hsl(var(--h) 55% 72%); background:hsl(var(--h) 45% 60% / .16); }
+/* 설정 패널 — 라벨 색: 칩 그리드 + 탭하면 그 칩만 인라인 편집 */
+.acc-count{ font-weight:500; opacity:.55; text-transform:none; letter-spacing:0; font-size:11px; }
+.chip-grid{ display:flex; flex-wrap:wrap; gap:8px; margin-top:3px; }
+.chip-grid .lbl{ cursor:pointer; user-select:none; }
+.chip-grid .lbl.sel{ box-shadow:0 0 0 2px var(--page), 0 0 0 4px currentColor; }
+.lab-editor{ display:flex; align-items:center; gap:11px; margin-top:14px;
+  padding-top:13px; border-top:1px dashed var(--chrome-rule); }
+.lab-editor .lbl{ min-width:62px; text-align:center; flex:0 0 auto; }
+.lab-editor input[type=range]{ flex:1; min-width:0; accent-color:var(--accent); }
+.lab-reset{ appearance:none; border:0; background:transparent; color:var(--chrome-ink);
+  cursor:pointer; font-size:16px; line-height:1; padding:5px 7px; border-radius:6px; flex:0 0 auto; }
+.lab-reset:hover{ background:color-mix(in srgb, var(--chrome-ink) 12%, transparent); }
+
+/* 스크롤 모드 */
+.reader.scrollmode .stage{ overflow-y:auto; -webkit-overflow-scrolling:touch; perspective:none; }
+.reader.scrollmode .tap-zones,
+.reader.scrollmode .layer.anim,
+.reader.scrollmode .page-shade{ display:none; }
+.reader.scrollmode .layer.below{ position:relative; height:auto; min-height:100%; }
+.reader.scrollmode .page{ height:auto; min-height:100%; box-shadow:none; }
+.reader.scrollmode .page-pad{ position:relative; inset:auto; overflow:visible;
+  min-height:100vh; }
+.reader.scrollmode .page-pad + .page-pad{ border-top:1px solid var(--rule); }
+
+/* ============================ 오버레이 (목차 / 설정) ============================ */
+.scrim{ position:fixed; inset:0; z-index:60; background:var(--overlay); opacity:0;
+  pointer-events:none; transition:opacity var(--dur) ease; }
+.scrim.show{ opacity:1; pointer-events:auto; }
+
+.sheet{ position:fixed; z-index:61; background:var(--chrome); color:var(--chrome-ink);
+  transition:transform .26s cubic-bezier(.2,.7,.25,1); display:flex; flex-direction:column; }
+
+/* 목차: 좌측 드로어 */
+.toc{ top:0; left:0; bottom:0; width:min(380px, 86vw); transform:translateX(-104%);
+  border-right:1px solid var(--chrome-rule); }
+.toc.show{ transform:translateX(0); }
+.sheet-head{ display:flex; align-items:center; justify-content:space-between;
+  padding:env(safe-area-inset-top) 18px 0; height:calc(58px + env(safe-area-inset-top));
+  border-bottom:1px solid var(--chrome-rule); flex:0 0 auto; }
+.sheet-head h2{ margin:0; font-size:15px; font-weight:600; color:var(--chrome-ink); }
+.toc-list{ overflow-y:auto; padding:8px 0 calc(20px + env(safe-area-inset-bottom)); flex:1; }
+.toc-item{ display:flex; align-items:baseline; gap:10px; width:100%; text-align:left;
+  background:none; border:0; color:var(--chrome-ink); font:inherit; cursor:pointer;
+  padding:9px 18px; font-size:14px; line-height:1.45; }
+.toc-item:hover{ background:color-mix(in srgb, var(--chrome-ink) 8%, transparent); }
+.toc-item.lv1{ font-weight:600; }
+.toc-item.lv2{ padding-left:18px; }
+.toc-item.lv3{ padding-left:38px; font-size:13px; color:var(--ink-soft); }
+.toc-item.active{ color:var(--accent); }
+.toc-item.active::before{ content:""; position:absolute; left:0; width:3px; height:1.4em;
+  background:var(--accent); border-radius:2px; }
+.toc-item{ position:relative; }
+.toc-item .pg{ margin-left:auto; font-size:11.5px; opacity:.6; font-variant-numeric:tabular-nums; }
+
+/* 설정: 하단 시트 */
+.settings{ left:0; right:0; bottom:0; transform:translateY(104%);
+  border-top:1px solid var(--chrome-rule); border-radius:14px 14px 0 0;
+  padding-bottom:env(safe-area-inset-bottom); max-height:86vh; }
+.settings.show{ transform:translateY(0); }
+.settings-body{ overflow-y:auto; padding:6px 20px 22px; }
+.set-row{ padding:15px 0; border-bottom:1px solid var(--chrome-rule); }
+.set-row:last-child{ border-bottom:0; }
+.set-label{ font-size:12px; font-weight:600; letter-spacing:.02em; text-transform:uppercase;
+  color:var(--ink-soft); margin-bottom:11px; }
+.seg{ display:flex; gap:6px; flex-wrap:wrap; }
+.seg button{ flex:1; min-width:max-content; appearance:none; border:1px solid var(--chrome-rule);
+  background:transparent; color:var(--chrome-ink); font:inherit; font-size:13.5px;
+  padding:9px 12px; border-radius:8px; cursor:pointer; transition:all .15s ease; }
+.seg button:hover{ border-color:var(--accent); }
+.seg button.on{ border-color:var(--accent); background:color-mix(in srgb,var(--accent) 14%,transparent);
+  color:var(--accent); font-weight:600; }
+.stepper{ display:flex; align-items:center; gap:14px; }
+.stepper button{ width:42px; height:42px; border-radius:10px; border:1px solid var(--chrome-rule);
+  background:transparent; color:var(--chrome-ink); font-size:20px; cursor:pointer; }
+.stepper button:active{ opacity:.6; }
+.stepper .val{ flex:1; text-align:center; font-size:14px; font-variant-numeric:tabular-nums; }
+.swatches{ display:flex; gap:12px; }
+.swatch{ width:46px; height:46px; border-radius:10px; cursor:pointer; position:relative;
+  border:1px solid var(--chrome-rule); display:flex; align-items:center; justify-content:center;
+  font-size:12px; }
+.swatch.on{ box-shadow:0 0 0 2px var(--accent); border-color:var(--accent); }
+.sw-paper{ background:#faf6ec; color:#2c2823; }
+.sw-sepia{ background:#ecdcbd; color:#43381f; }
+.sw-gray{ background:#26262b; color:#c9c6c0; }
+.sw-black{ background:#0c0c0d; color:#b6b4af; }
+
+/* 안내 토스트 (처음 진입) */
+.hint{ position:fixed; left:50%; bottom:calc(70px + env(safe-area-inset-bottom));
+  transform:translateX(-50%); z-index:55; background:rgba(0,0,0,.86); color:#fff;
+  font-size:13px; padding:10px 16px; border-radius:999px; pointer-events:none;
+  opacity:0; transition:opacity .3s ease; white-space:nowrap; }
+.hint.show{ opacity:1; }
+
+@media (max-width:520px){
+  .prog-track,.prog-meta{ width:84%; }
+  .topbar .doc-title{ font-size:13.5px; }
+}
+@media print{ .chrome,.tap-zones,.scrim,.sheet,.hint{ display:none !important; } }
+</style>
+</head>
+<body>
+
+<!-- ===================================================================
+     콘텐츠 = 원본 마크다운 그대로. 이 블록 안 텍스트만 갈아끼우면 됩니다.
+     (type="text/markdown" 이라 브라우저가 렌더하지 않고 원문을 보존)
+     =================================================================== -->
+<script type="text/markdown" id="book-md">
+# 책 리더 데모 — 지원 요소 한 바퀴
+
+> 이 문서는 `build.py` 가 다루는 마크다운 요소를 **하나도 빠짐없이** 펼쳐 보이는 데모다. H2 가 나올 때마다 새 챕터로 끊기는지도 함께 살핀다.
+
+## 1. 헤딩과 텍스트 서식
+
+이 줄 위의 두 제목이 각각 H1 과 H2 다. 그 아래가 H3 이다.
+
+### 작은 제목 (H3)
+
+한 문장 안에서 **굵게**와 *기울임*, 그리고 인라인 `코드` 가 모두 살아 있는지 본다. 셋이 나란히 놓여도 무너지지 않아야 한다.
+
+링크도 본문 안에서 자연스럽게 이어진다. [외부 링크](https://example.com) 든 [옆 문서](README.html) 든 눌러서 바로 넘어간다.
+
+## 2. 근거 라벨 칩
+
+네 종류의 근거 라벨이 빠짐없이 고정 색칩으로 떠야 한다.
+
+- `[사실]` 검증된 내용
+- `[추정]` 근거는 있으나 단정하기 이른 것
+- `[의견]` 주관적인 판단
+- `[모름]` 아직 확인하지 못한 것
+
+자주 쓰는 라벨도 고정 색을 갖는다.
+
+- `[중요]` `[TODO]` `[질문]` `[참고]` `[경고]` `[팁]`
+
+그 밖의 단어는 무엇이든 라벨이 되며, 색은 단어마다 자동으로 정해진다. 같은 단어는 어느 문서에서나 같은 색이다.
+
+- `[배포]` `[보류]` `[리뷰]` `[아이디어]`
+
+## 3. 목록과 인용
+
+- 첫째 항목
+- 둘째 항목
+- 셋째 항목
+
+> 인용문 또한 제 들여쓰기를 갖춘 채 렌더되는지 확인한다.
+
+## 4. 표
+
+| 요소 | 지원 | 비고 |
+|---|---|---|
+| 헤딩 | 예 | H1~H3 가 챕터로 |
+| 표 | 예 | 바로 이 표 |
+| 라벨 칩 | 예 | 위 2번 챕터 |
+
+## 5. 코드펜스와 구분선
+
+```
+python build.py test.md test.html
+```
+
+위가 코드펜스, 아래가 구분선(`---`) 이다.
+
+---
+
+여기가 마지막 문단이다. 이 H2 가 새 페이지로 깔끔히 넘어갔다면, 페이지네이션도 제대로 도는 것이다.
+
+</script>
+
+<!-- ============================ 리더 UI ============================ -->
+<div class="reader" id="reader">
+  <header class="chrome topbar">
+    <button class="btn" id="btnToc" aria-label="목차">
+      <svg viewBox="0 0 24 24"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="14" y2="18"/></svg>
+      <span>목차</span>
+    </button>
+    <div class="doc-title" id="docTitle">책</div>
+    <button class="btn aa" id="btnSettings" aria-label="설정">Aa</button>
+  </header>
+
+  <main class="stage" id="stage">
+    <div class="layer below"><div class="page"><div class="page-pad" id="padBelow"></div><div class="page-shade"></div></div></div>
+    <div class="layer anim" id="animLayer"><div class="page"><div class="page-pad" id="padAnim"></div><div class="page-shade" id="animShade"></div></div></div>
+    <div class="tap-zones" id="tapZones">
+      <div class="z prev" data-nav="prev"></div>
+      <div class="z mid" data-nav="mid"></div>
+      <div class="z next" data-nav="next"></div>
+    </div>
+  </main>
+
+  <footer class="chrome botbar">
+    <div class="prog-track"><div class="prog-fill" id="progFill"></div></div>
+    <div class="prog-meta"><span class="chap" id="metaChap"></span><span id="metaPage">0 / 0</span></div>
+  </footer>
+</div>
+
+<!-- 측정용 숨은 페이지 (실제 무대와 동일 크기여야 정확히 분할됨) -->
+<div class="layer below" id="measureLayer" style="visibility:hidden;z-index:-1;pointer-events:none;"><div class="page"><div class="page-pad" id="padMeasure"></div></div></div>
+
+<!-- 오버레이 -->
+<div class="scrim" id="scrim"></div>
+
+<aside class="sheet toc" id="tocSheet" aria-hidden="true">
+  <div class="sheet-head"><h2>목차</h2>
+    <button class="btn" id="tocClose" aria-label="닫기"><svg viewBox="0 0 24 24"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button>
+  </div>
+  <nav class="toc-list" id="tocList"></nav>
+</aside>
+
+<aside class="sheet settings" id="setSheet" aria-hidden="true">
+  <div class="sheet-head"><h2>읽기 설정</h2>
+    <button class="btn" id="setClose" aria-label="닫기"><svg viewBox="0 0 24 24"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button>
+  </div>
+  <div class="settings-body">
+    <div class="set-row">
+      <div class="set-label">테마</div>
+      <div class="swatches" id="setTheme">
+        <div class="swatch sw-paper" data-theme="paper">가</div>
+        <div class="swatch sw-sepia" data-theme="sepia">가</div>
+        <div class="swatch sw-gray" data-theme="gray">가</div>
+        <div class="swatch sw-black" data-theme="black">가</div>
+      </div>
+    </div>
+    <div class="set-row">
+      <div class="set-label">페이지 넘김</div>
+      <div class="seg" id="setFlip">
+        <button data-flip="flip3d">3D 넘김</button>
+        <button data-flip="slide">슬라이드</button>
+        <button data-flip="fade">페이드</button>
+        <button data-flip="scroll">스크롤</button>
+      </div>
+    </div>
+    <div class="set-row">
+      <div class="set-label">글자 크기</div>
+      <div class="stepper"><button id="sizeDown">−</button><div class="val" id="sizeVal">18px</div><button id="sizeUp">+</button></div>
+    </div>
+    <div class="set-row">
+      <div class="set-label">줄 간격</div>
+      <div class="seg" id="setLead">
+        <button data-lead="1.6">좁게</button>
+        <button data-lead="1.9">보통</button>
+        <button data-lead="2.2">넓게</button>
+      </div>
+    </div>
+    <div class="set-row">
+      <div class="set-label">글꼴</div>
+      <div class="seg" id="setFont">
+        <button data-font="sans">고딕</button>
+        <button data-font="serif">명조</button>
+      </div>
+    </div>
+    <div class="set-row" id="setLabelRow" hidden>
+      <div class="set-label">라벨 색 <span class="acc-count" id="setLabelCount"></span></div>
+      <div class="chip-grid" id="setLabels"></div>
+      <div class="lab-editor" id="labelEditor" hidden>
+        <span class="lbl auto" id="labEditChip" data-key=""></span>
+        <input type="range" min="0" max="359" id="labEditRange" aria-label="라벨 색조" />
+        <button class="lab-reset" id="labEditReset" title="자동 색으로">↺</button>
+      </div>
+    </div>
+  </div>
+</aside>
+
+<div class="hint" id="hint">좌우를 탭하거나 밀어서 넘기세요 · 가운데 탭으로 메뉴</div>
+
+<script>
+/* =========================================================================
+   1) 미니 마크다운 → HTML 파서
+   지원: # ## ###, **bold**, `code`, [라벨]칩, > 인용(연속),
+        ``` 코드펜스, | 표 |, - 목록, 단락, *italic*, ---
+   ========================================================================= */
+function esc(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+const LABELS = { '사실':'fact','추정':'guess','의견':'op','모름':'none' };
+// 자주 쓰는 라벨은 hue 를 고정(종이/신문 톤). 한/영 별칭 동일 색.
+const HUES = {
+  '중요':6,'IMPORTANT':6, 'TODO':214,'할일':214, '질문':278,'QUESTION':278,
+  '참고':158,'NOTE':158,'REF':158, '경고':32,'WARNING':32, '팁':176,'TIP':176,
+};
+// 예약 hue 없으면 단어 해시 → 0~359 (같은 단어는 항상 같은 색)
+function hue(s){
+  if (HUES[s] != null) return HUES[s];
+  let h=0; for(let i=0;i<s.length;i++) h=(h*31+s.charCodeAt(i))>>>0; return h%360;
+}
+const usedLabels = new Set();   // 문서에 쓰인 커스텀(비시맨틱) 라벨 — 설정에서 색 조절용
+function attr(s){ return esc(s).replace(/"/g,'&quot;'); }
+
+function inline(text){
+  // 코드 먼저 추출(내부는 이스케이프, 인라인 처리 안 함) → 자리표시자
+  const codes = [];
+  text = text.replace(/`([^`]+)`/g, (m, c) => {
+    const t = c.trim();
+    const lm = /^\[(.+)\]$/.exec(t);          // [사실] 같은 라벨에서 대괄호 제거
+    const key = lm ? lm[1] : null;
+    let html;
+    if (key && LABELS[key]) html = '<span class="lbl '+LABELS[key]+'">'+esc(t)+'</span>';
+    else if (key){ usedLabels.add(key); html = '<span class="lbl auto" data-key="'+attr(key)+'">'+esc(t)+'</span>'; }
+    else html = '<code>'+esc(c)+'</code>';
+    codes.push(html); return '\u0000'+(codes.length-1)+'\u0000';
+  });
+  text = esc(text);
+  text = text.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+  text = text.replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>');
+  // 링크 [텍스트](url "제목") — 이미지(! 앞)는 제외. 외부 http 는 새 탭, 로컬은 같은 탭.
+  text = text.replace(/(^|[^!])\[([^\]]+)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)/g, (m, pre, txt, href, title) => {
+    const ext = /^(https?:|mailto:|\/\/)/i.test(href);
+    const tgt = ext ? ' target="_blank" rel="noopener noreferrer"' : '';
+    const tt = title ? ' title="'+title+'"' : '';
+    return pre + '<a href="'+href+'"'+tgt+tt+'>'+txt+'</a>';
+  });
+  text = text.replace(/\u0000(\d+)\u0000/g, (m, i) => codes[+i]);
+  return text;
+}
+
+function slug(s){
+  return s.toLowerCase().replace(/<[^>]+>/g,'').replace(/[^\w\uac00-\ud7a3\s-]/g,'')
+    .trim().replace(/\s+/g,'-').slice(0,60) || 'h';
+}
+
+function parseMarkdown(md){
+  const lines = md.replace(/\r/g,'').split('\n');
+  let html = '', i = 0; const usedIds = {};
+  const mkId = base => { let id = base, n = 2; while(usedIds[id]){ id = base+'-'+n++; } usedIds[id]=1; return id; };
+
+  while (i < lines.length){
+    let line = lines[i];
+
+    // 코드펜스
+    if (/^```/.test(line)){
+      let buf = []; i++;
+      while (i < lines.length && !/^```/.test(lines[i])){ buf.push(lines[i]); i++; }
+      i++; html += '<pre><code>'+esc(buf.join('\n'))+'</code></pre>'; continue;
+    }
+    // 헤딩
+    let h = /^(#{1,3})\s+(.*)$/.exec(line);
+    if (h){
+      const lv = h[1].length, txt = inline(h[2].trim());
+      const id = mkId(slug(h[2]));
+      html += '<h'+lv+' id="'+id+'" data-h="'+lv+'">'+txt+'</h'+lv+'>';
+      i++; continue;
+    }
+    // 수평선
+    if (/^---+\s*$/.test(line)){ html += '<hr/>'; i++; continue; }
+    // 인용(연속 라인)
+    if (/^>\s?/.test(line)){
+      let buf = [];
+      while (i < lines.length && /^>\s?/.test(lines[i])){ buf.push(lines[i].replace(/^>\s?/,'')); i++; }
+      html += '<blockquote>'+buf.map(b=> b.trim()? '<p>'+inline(b)+'</p>':'').join('')+'</blockquote>';
+      continue;
+    }
+    // 표
+    if (/^\|.*\|/.test(line) && i+1 < lines.length && /^\|?[\s:|-]+\|?\s*$/.test(lines[i+1]) && lines[i+1].includes('-')){
+      const splitRow = r => r.replace(/^\||\|$/g,'').split('|').map(c=>c.trim());
+      const head = splitRow(line); i += 2;
+      let body = '';
+      while (i < lines.length && /^\|.*\|/.test(lines[i])){
+        const cells = splitRow(lines[i]);
+        body += '<tr>'+cells.map(c=>'<td>'+inline(c)+'</td>').join('')+'</tr>'; i++;
+      }
+      html += '<div class="table-wrap"><table><thead><tr>'
+        + head.map(c=>'<th>'+inline(c)+'</th>').join('')
+        + '</tr></thead><tbody>'+body+'</tbody></table></div>';
+      continue;
+    }
+    // 목록
+    if (/^[-*]\s+/.test(line)){
+      let buf = '';
+      while (i < lines.length && /^[-*]\s+/.test(lines[i])){
+        buf += '<li>'+inline(lines[i].replace(/^[-*]\s+/,''))+'</li>'; i++;
+      }
+      html += '<ul>'+buf+'</ul>'; continue;
+    }
+    // 빈 줄
+    if (/^\s*$/.test(line)){ i++; continue; }
+    // 단락(연속 비빈 줄 묶기)
+    let buf = [];
+    while (i < lines.length && !/^\s*$/.test(lines[i]) && !/^(#{1,3}\s|>|```|\||[-*]\s|---)/.test(lines[i])){
+      buf.push(lines[i]); i++;
+    }
+    if (buf.length) html += '<p>'+inline(buf.join(' '))+'</p>';
+  }
+  return html;
+}
+
+/* =========================================================================
+   2) 상태 + 영속화
+   ========================================================================= */
+const $ = s => document.querySelector(s);
+const reader = $('#reader');
+const DEFAULTS = { theme:'paper', flip:'flip3d', size:18, lead:1.9, font:'sans' };
+let settings = Object.assign({}, DEFAULTS, load('br-settings', {}));
+if (!settings.labelHues || typeof settings.labelHues !== 'object') settings.labelHues = {};
+const STORE_POS = 'br-pos';
+
+function load(k, d){ try{ return JSON.parse(localStorage.getItem(k)) ?? d; }catch(e){ return d; } }
+function save(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+
+/* =========================================================================
+   3) 페이지네이션 (H2 = 새 챕터, 높이 초과 시 자동 분할)
+   ========================================================================= */
+// build.py 주입 시 닫는 스크립트 태그를 이스케이프하므로 파싱 전 원복(코드 예시 정확성)
+const rawMd = $('#book-md').textContent.replace(/<\\\/script>/g, '<\/script>');
+const sourceHtml = parseMarkdown(rawMd);
+const srcDoc = document.createElement('div');
+srcDoc.innerHTML = sourceHtml;
+const srcNodes = Array.from(srcDoc.children);
+
+// 문서 제목
+const h1 = srcDoc.querySelector('h1');
+const docTitle = h1 ? h1.textContent : '책';
+$('#docTitle').textContent = docTitle;
+document.title = docTitle + ' · 책 리더';
+
+let pages = [];        // {html, headings:[{id,level,text}]}
+const headingPage = {}; // id -> page index
+let current = 0;
+
+function paginate(){
+  const pad = $('#padMeasure');
+  const maxH = pad.clientHeight;
+  pages = []; for (const k in headingPage) delete headingPage[k];
+  let curNodes = [];
+  const flush = () => {
+    if (!curNodes.length) return;
+    const headings = curNodes.filter(n=>/^H[1-3]$/.test(n.tagName))
+      .map(n=>({ id:n.id, level:+n.dataset.h, text:n.textContent }));
+    pages.push({ html: curNodes.map(n=>n.outerHTML).join(''), headings });
+    curNodes = [];
+  };
+  for (const node of srcNodes){
+    const isBreak = node.tagName === 'H1' || node.tagName === 'H2';
+    if (isBreak && curNodes.length) flush();
+    curNodes.push(node);
+    pad.innerHTML = curNodes.map(n=>n.outerHTML).join('');
+    if (pad.scrollHeight > maxH && curNodes.length > 1){
+      const last = curNodes.pop();
+      flush();
+      curNodes.push(last);
+      pad.innerHTML = last.outerHTML;
+    }
+  }
+  flush();
+  pages.forEach((p, idx) => p.headings.forEach(h => { if (headingPage[h.id] === undefined) headingPage[h.id] = idx; }));
+}
+
+/* =========================================================================
+   4) 렌더 + 네비게이션 + 넘김 효과
+   ========================================================================= */
+const padBelow = $('#padBelow'), padAnim = $('#padAnim');
+const animLayer = $('#animLayer'), animShade = $('#animShade');
+const stage = $('#stage');
+let animating = false;
+
+function setHtml(pad, idx){ pad.innerHTML = (pages[idx] && pages[idx].html) || ''; pad.scrollTop = 0; }
+
+function renderBase(){
+  if (settings.flip === 'scroll'){ padBelow.innerHTML = sourceHtml; }
+  else { setHtml(padBelow, current); }
+}
+
+function updateChrome(){
+  if (settings.flip === 'scroll'){ updateChromeScroll(); return; }
+  const total = pages.length;
+  $('#metaPage').textContent = (current+1) + ' / ' + total;
+  $('#progFill').style.width = total>1 ? (current/(total-1)*100)+'%' : '100%';
+  // 현재 챕터(가장 가까운 H1/H2)
+  let chap = '';
+  for (let i = current; i >= 0; i--){
+    const hs = pages[i].headings.filter(h=>h.level<=2);
+    if (hs.length){ chap = hs[hs.length-1].text; break; }
+  }
+  $('#metaChap').textContent = chap;
+  // 목차 활성
+  document.querySelectorAll('.toc-item').forEach(el=>{
+    el.classList.toggle('active', headingPage[el.dataset.id] === current);
+  });
+  save(STORE_POS+':'+docTitle, current);
+}
+
+function updateChromeScroll(){
+  const max = stage.scrollHeight - stage.clientHeight;
+  const ratio = max > 0 ? stage.scrollTop / max : 0;
+  $('#progFill').style.width = (ratio*100)+'%';
+  $('#metaPage').textContent = Math.round(ratio*100) + '%';
+  // 화면 상단을 지난 마지막 헤딩 = 현재 챕터 + 목차 활성
+  const hs = padBelow.querySelectorAll('h1,h2,h3');
+  let chap = '', activeId = null;
+  hs.forEach(h => { if (h.offsetTop - stage.scrollTop <= 80){ if(+h.dataset.h<=2) chap = h.textContent; activeId = h.id; } });
+  $('#metaChap').textContent = chap;
+  document.querySelectorAll('.toc-item').forEach(el=> el.classList.toggle('active', el.dataset.id === activeId));
+}
+
+function clamp(n){ return Math.max(0, Math.min(pages.length-1, n)); }
+
+// rAF 트윈 (백그라운드에서 rAF가 멈춰도 잠금이 풀리도록 워치독 포함)
+function tween(from, to, dur, step, done){
+  const t0 = performance.now();
+  const ease = p => 1 - Math.pow(1-p, 3);
+  let finished = false;
+  const finish = () => { if (finished) return; finished = true; step(to); if (done) done(); };
+  function frame(t){
+    if (finished) return;
+    let p = Math.min(1, (t-t0)/dur);
+    step(from + (to-from)*ease(p));
+    if (p < 1) requestAnimationFrame(frame); else finish();
+  }
+  requestAnimationFrame(frame);
+  setTimeout(finish, dur + 300);
+}
+
+// 넘김 진행 적용: prog 0~1, dir 'next'|'prev'
+function applyTurn(prog, dir, mode){
+  if (mode === 'fade'){
+    if (dir === 'next'){ animLayer.style.opacity = (1-prog); }
+    else { animLayer.style.opacity = prog; }
+    animLayer.style.transform = '';
+  } else if (mode === 'slide'){
+    animLayer.style.opacity = 1;
+    if (dir === 'next'){ animLayer.style.transform = 'translateX('+(-prog*100)+'%)'; }
+    else { animLayer.style.transform = 'translateX('+((prog-1)*100)+'%)'; }
+  } else { // flip3d
+    animLayer.style.opacity = 1;
+    const ang = dir === 'next' ? -90*prog : -90*(1-prog);
+    animLayer.style.transform = 'rotateY('+ang+'deg)';
+    animShade.style.opacity = dir === 'next' ? prog : (1-prog);
+  }
+}
+
+function prepareTurn(dir, mode){
+  animLayer.classList.toggle('flipping', mode === 'flip3d');
+  animShade.style.opacity = 0;
+  if (dir === 'next'){
+    setHtml(padAnim, current);          // 떠나는 현재 페이지가 위
+    setHtml(padBelow, current+1);       // 다음 페이지가 아래에서 드러남
+  } else {
+    setHtml(padAnim, current-1);        // 들어오는 이전 페이지가 위
+    setHtml(padBelow, current);         // 현재가 아래
+  }
+  animLayer.style.display = 'flex';
+  applyTurn(0, dir, mode);
+}
+
+function go(dir){
+  if (animating) return;
+  const target = dir === 'next' ? current+1 : current-1;
+  if (target < 0 || target >= pages.length){ bounce(dir); return; }
+  const mode = settings.flip;
+  if (mode === 'scroll'){ current = target; renderBase(); updateChrome(); return; }
+  animating = true;
+  prepareTurn(dir, mode);
+  tween(0, 1, 360, p => applyTurn(p, dir, mode), () => {
+    current = target;
+    renderBase();
+    animLayer.style.display = 'none';
+    animLayer.style.transform = ''; animLayer.style.opacity = 1; animShade.style.opacity = 0;
+    animating = false;
+    updateChrome();
+  });
+}
+
+function bounce(dir){
+  const sign = dir === 'next' ? -1 : 1;
+  const el = padBelow.parentElement.parentElement;
+  tween(0, 1, 280, p => {
+    const o = Math.sin(p*Math.PI) * 22 * sign;
+    el.style.transform = 'translateX('+o+'px)';
+  }, () => { el.style.transform = ''; });
+}
+
+/* ---- 드래그 / 스와이프 ---- */
+let drag = null;
+stage.addEventListener('pointerdown', e => {
+  if (settings.flip === 'scroll' || animating) return;
+  if (e.target.closest('.toc-item')) return;
+  drag = { x:e.clientX, y:e.clientY, dir:null, active:false, w:stage.clientWidth, t:performance.now(), type:e.pointerType };
+});
+stage.addEventListener('pointermove', e => {
+  if (!drag) return;
+  const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+  if (!drag.active){
+    if (Math.abs(dx) < 8 || Math.abs(dx) < Math.abs(dy)) return;
+    // 마우스는 드래그로 넘기지 않고 텍스트 선택을 허용 (데스크탑은 좌우 탭·키보드로 넘김)
+    if (drag.type === 'mouse'){ drag = null; return; }
+    drag.dir = dx < 0 ? 'next' : 'prev';
+    const target = drag.dir === 'next' ? current+1 : current-1;
+    if (target < 0 || target >= pages.length){ const d=drag.dir; drag = null; bounce(d); return; }
+    drag.active = true;
+    reader.classList.add('dragging');
+    const sel = window.getSelection && window.getSelection(); if (sel) sel.removeAllRanges();
+    prepareTurn(drag.dir, settings.flip);
+    try{ stage.setPointerCapture(e.pointerId); }catch(_){}
+  }
+  let prog = drag.dir === 'next' ? (-dx/drag.w) : (dx/drag.w);
+  prog = Math.max(0, Math.min(1, prog));
+  drag.prog = prog;
+  e.preventDefault();
+  applyTurn(prog, drag.dir, settings.flip);
+});
+stage.addEventListener('pointerup', e => {
+  if (!drag){ return; }
+  if (!drag.active){ drag = null; return; }
+  reader.classList.remove('dragging');
+  lastSwipe = performance.now();
+  const mode = settings.flip, dir = drag.dir;
+  const dx = e.clientX - drag.x, dt = performance.now() - drag.t;
+  const vel = Math.abs(dx)/dt; // px/ms
+  const prog = drag.prog || 0;
+  const commit = prog > 0.5 || vel > 0.5;
+  animating = true;
+  const d = drag; drag = null;
+  if (commit){
+    tween(prog, 1, 240*(1-prog)+80, p => applyTurn(p, dir, mode), () => {
+      current = dir === 'next' ? current+1 : current-1;
+      renderBase(); animLayer.style.display='none';
+      animLayer.style.transform=''; animLayer.style.opacity=1; animShade.style.opacity=0;
+      animating = false; updateChrome();
+    });
+  } else {
+    tween(prog, 0, 200, p => applyTurn(p, dir, mode), () => {
+      animLayer.style.display='none';
+      animLayer.style.transform=''; animLayer.style.opacity=1; animShade.style.opacity=0;
+      animating = false;
+    });
+  }
+});
+stage.addEventListener('pointercancel', () => { drag = null; reader.classList.remove('dragging'); });
+
+/* ---- 탭 영역 (오버레이는 통과시키고 stage 클릭 좌표로 판정 → 텍스트 선택 보존) ---- */
+let lastSwipe = 0;
+stage.addEventListener('click', e => {
+  if (settings.flip === 'scroll') return;
+  if (performance.now() - lastSwipe < 400) return;      // 방금 스와이프로 넘겼으면 무시
+  if (e.target.closest('a')) return;                    // 링크 클릭은 통과
+  const sel = window.getSelection && window.getSelection();
+  if (sel && String(sel).trim()) return;                // 텍스트를 선택 중이면 넘기지 않음
+  const x = e.clientX - stage.getBoundingClientRect().left;
+  const w = stage.clientWidth;
+  if (x < w * 0.30) go('prev');
+  else if (x > w * 0.70) go('next');
+  else reader.classList.toggle('immersive');
+});
+
+/* ---- 키보드 ---- */
+window.addEventListener('keydown', e => {
+  if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') { e.preventDefault(); go('next'); }
+  else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); go('prev'); }
+  else if (e.key === 'Escape') closeSheets();
+});
+
+/* =========================================================================
+   5) 목차
+   ========================================================================= */
+function buildToc(){
+  const list = $('#tocList'); list.innerHTML = '';
+  srcNodes.filter(n=>/^H[1-3]$/.test(n.tagName)).forEach(n => {
+    const lv = +n.dataset.h;
+    const b = document.createElement('button');
+    b.className = 'toc-item lv'+lv; b.dataset.id = n.id;
+    b.innerHTML = '<span>'+n.innerHTML+'</span><span class="pg">'+((headingPage[n.id]??0)+1)+'</span>';
+    b.addEventListener('click', () => { jumpTo(n.id); closeSheets(); });
+    list.appendChild(b);
+  });
+}
+function jumpTo(id){
+  if (settings.flip === 'scroll'){
+    const el = padBelow.querySelector('#'+CSS.escape(id));
+    if (el) stage.scrollTop = el.offsetTop - 64;
+    updateChrome();
+    return;
+  }
+  const idx = headingPage[id];
+  if (idx === undefined) return;
+  current = clamp(idx);
+  renderBase(); updateChrome();
+}
+
+/* =========================================================================
+   6) 설정 적용
+   ========================================================================= */
+function applySettings(){
+  document.documentElement.dataset.theme = settings.theme;
+  document.documentElement.style.setProperty('--reader-size', settings.size+'px');
+  document.documentElement.style.setProperty('--reader-leading', settings.lead);
+  document.documentElement.style.setProperty('--reader-font', settings.font==='serif'?'var(--font-serif)':'var(--font-sans)');
+  reader.classList.toggle('scrollmode', settings.flip === 'scroll');
+  // UI 상태 반영
+  document.querySelectorAll('#setTheme .swatch').forEach(s=>s.classList.toggle('on', s.dataset.theme===settings.theme));
+  document.querySelectorAll('#setFlip button').forEach(s=>s.classList.toggle('on', s.dataset.flip===settings.flip));
+  document.querySelectorAll('#setLead button').forEach(s=>s.classList.toggle('on', +s.dataset.lead===settings.lead));
+  document.querySelectorAll('#setFont button').forEach(s=>s.classList.toggle('on', s.dataset.font===settings.font));
+  $('#sizeVal').textContent = settings.size+'px';
+  save('br-settings', settings);
+}
+
+// 라벨별 hue 를 스타일시트로 주입 (오버라이드 없으면 기본 hue). 칩·미리보기에 동시 적용.
+function labelHue(k){ return settings.labelHues[k] != null ? settings.labelHues[k] : hue(k); }
+function applyLabelStyle(){
+  let css = '';
+  usedLabels.forEach(k => {
+    const sel = '.lbl.auto[data-key="' + k.replace(/["\\]/g,'\\$&') + '"]';
+    css += sel + '{--h:' + labelHue(k) + '}';
+  });
+  let el = document.getElementById('labelStyle');
+  if (!el){ el = document.createElement('style'); el.id = 'labelStyle'; document.head.appendChild(el); }
+  el.textContent = css;
+}
+
+// 설정 패널의 "라벨 색": 문서에 쓰인 라벨을 색칩 그리드로. 칩 탭 → 그 칩만 편집.
+let editKey = null;
+function buildLabelControls(){
+  const wrap = $('#setLabels'); if (!wrap) return;
+  const keys = [...usedLabels].sort();
+  $('#setLabelRow').hidden = keys.length === 0;
+  $('#setLabelCount').textContent = keys.length ? '('+keys.length+')' : '';
+  wrap.innerHTML = keys.map(k =>
+    '<span class="lbl auto" data-key="'+attr(k)+'" role="button" tabindex="0">'+esc(k)+'</span>'
+  ).join('');
+  closeLabelEditor();
+}
+function openLabelEditor(k){
+  editKey = k;
+  const chip = $('#labEditChip'); chip.dataset.key = k; chip.textContent = k;
+  $('#labEditRange').value = labelHue(k);
+  $('#labelEditor').hidden = false;
+  applyLabelStyle();   // 편집용 칩(같은 data-key)도 색 반영
+  document.querySelectorAll('#setLabels .lbl').forEach(c => c.classList.toggle('sel', c.dataset.key === k));
+}
+function closeLabelEditor(){
+  editKey = null;
+  const e = $('#labelEditor'); if (e) e.hidden = true;
+  document.querySelectorAll('#setLabels .lbl.sel').forEach(c => c.classList.remove('sel'));
+}
+
+function reflow(keepId){
+  // 재배치 전 기준 heading 기억
+  let anchor = keepId;
+  if (!anchor && pages[current]) anchor = (pages[current].headings[0]||{}).id;
+  paginate();
+  if (anchor && headingPage[anchor] !== undefined) current = headingPage[anchor];
+  current = clamp(current);
+  renderBase();
+  buildToc();
+  updateChrome();
+}
+
+// 스크롤 모드 진행 갱신
+stage.addEventListener('scroll', () => { if (settings.flip === 'scroll') updateChromeScroll(); }, { passive:true });
+
+/* 설정 이벤트 */
+$('#setTheme').addEventListener('click', e => { const t=e.target.closest('.swatch'); if(!t)return; settings.theme=t.dataset.theme; applySettings(); });
+$('#setFlip').addEventListener('click', e => { const b=e.target.closest('button'); if(!b)return; settings.flip=b.dataset.flip; applySettings(); reflow(); });
+$('#setLead').addEventListener('click', e => { const b=e.target.closest('button'); if(!b)return; settings.lead=+b.dataset.lead; applySettings(); reflow(); });
+$('#setFont').addEventListener('click', e => { const b=e.target.closest('button'); if(!b)return; settings.font=b.dataset.font; applySettings(); reflow(); });
+$('#sizeUp').addEventListener('click', () => { settings.size=Math.min(28,settings.size+1); applySettings(); reflow(); });
+$('#sizeDown').addEventListener('click', () => { settings.size=Math.max(14,settings.size-1); applySettings(); reflow(); });
+// 라벨 색: 칩 탭 → 편집 토글, 슬라이더로 hue 조정(라이브), 리셋으로 자동 색 복귀
+$('#setLabels').addEventListener('click', e => {
+  const c = e.target.closest('.lbl'); if(!c) return;
+  (editKey === c.dataset.key) ? closeLabelEditor() : openLabelEditor(c.dataset.key);
+});
+$('#setLabels').addEventListener('keydown', e => {
+  if (e.key !== 'Enter' && e.key !== ' ') return;
+  const c = e.target.closest('.lbl'); if(!c) return; e.preventDefault();
+  openLabelEditor(c.dataset.key);
+});
+$('#labEditRange').addEventListener('input', e => {
+  if (editKey == null) return;
+  settings.labelHues[editKey] = +e.target.value; applyLabelStyle(); save('br-settings', settings);
+});
+$('#labEditReset').addEventListener('click', () => {
+  if (editKey == null) return;
+  delete settings.labelHues[editKey];
+  $('#labEditRange').value = labelHue(editKey); applyLabelStyle(); save('br-settings', settings);
+});
+
+/* =========================================================================
+   7) 오버레이 열고 닫기
+   ========================================================================= */
+const scrim = $('#scrim');
+function openSheet(el){ scrim.classList.add('show'); el.classList.add('show'); el.setAttribute('aria-hidden','false'); }
+function closeSheets(){ scrim.classList.remove('show'); $('#tocSheet').classList.remove('show'); $('#setSheet').classList.remove('show'); }
+$('#btnToc').addEventListener('click', ()=>openSheet($('#tocSheet')));
+$('#btnSettings').addEventListener('click', ()=>openSheet($('#setSheet')));
+$('#tocClose').addEventListener('click', closeSheets);
+$('#setClose').addEventListener('click', closeSheets);
+scrim.addEventListener('click', closeSheets);
+
+/* =========================================================================
+   8) 부팅
+   ========================================================================= */
+function boot(){
+  applySettings();
+  applyLabelStyle();
+  buildLabelControls();
+  paginate();
+  buildToc();
+  current = clamp(load(STORE_POS+':'+docTitle, 0));
+  renderBase();
+  updateChrome();
+  // 첫 진입 힌트
+  if (!load('br-hinted', false)){
+    const hint = $('#hint'); hint.classList.add('show');
+    setTimeout(()=>hint.classList.remove('show'), 3200);
+    save('br-hinted', true);
+  }
+}
+boot();
+
+// 리사이즈 시 재배치(디바운스)
+let rt; window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(()=>reflow(), 200); });
+</script>
+</body>
+</html>
