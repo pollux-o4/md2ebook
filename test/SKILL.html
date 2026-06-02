@@ -145,8 +145,18 @@ body{ font-family:var(--reader-font); color:var(--ink); }
 .page-pad h2{ font-size:1.3em; line-height:1.35; font-weight:600; margin:1.5em 0 .55em;
   padding-bottom:.32em; border-bottom:1px solid var(--rule); }
 .page-pad h3{ font-size:1.08em; font-weight:600; margin:1.5em 0 .4em; color:var(--ink); }
+.page-pad h4{ font-size:1em; font-weight:600; margin:1.3em 0 .35em; color:var(--ink); }
+.page-pad h5{ font-size:.92em; font-weight:600; margin:1.2em 0 .3em; color:var(--ink-soft);
+  letter-spacing:.01em; }
+.page-pad h6{ font-size:.85em; font-weight:600; margin:1.2em 0 .3em; color:var(--ink-soft);
+  letter-spacing:.04em; text-transform:uppercase; }
 .page-pad p{ margin:0 0 1.05em; }
 .page-pad strong{ font-weight:600; }
+.page-pad del{ color:var(--ink-soft); text-decoration-thickness:1px; }
+.page-pad img{ max-width:100%; max-height:80vh; height:auto; display:block;
+  margin:1.1em auto; border-radius:6px; }
+.page-pad li.task{ list-style:none; margin-left:-1.1em; }
+.page-pad li.task input{ margin-right:.5em; vertical-align:middle; accent-color:var(--accent); }
 .page-pad a{ color:var(--accent); text-decoration:none; border-bottom:1px dotted var(--accent); }
 .page-pad ul,.page-pad ol{ margin:0 0 1.05em; padding-left:1.35em; }
 .page-pad li{ margin:.32em 0; }
@@ -324,7 +334,7 @@ python build.py <문서.md> [출력.html]
 
 ## 입력 마크다운 규약
 
-지원: `# ## ###` 헤딩, `**굵게**`, `*기울임*`, 인라인 코드, 코드펜스, `> 인용`, `| 표 |`, `- 목록`, `---`, 그리고 `[사실]` `[중요]` 식 라벨 칩(아무 단어나 가능 — 위 "라벨 칩" 참조).
+지원: `#`~`######` 헤딩(H1~H6), `**굵게**`, `*기울임*`, `~~취소선~~`, 인라인 코드, 코드펜스, `> 인용`, `| 표 |`, 목록(`-` 비순서 · `1.` 번호 · 들여쓰기 중첩 · `- [ ]` 체크박스), `[텍스트](url)` 링크, `![대체](src)` 이미지, `---`, 그리고 `[사실]` `[중요]` 식 라벨 칩(아무 단어나 가능 — 위 "라벨 칩" 참조).
 
 ## 안티패턴
 
@@ -454,6 +464,7 @@ function attr(s){ return esc(s).replace(/"/g,'&quot;'); }
 function inline(text){
   // 코드 먼저 추출(내부는 이스케이프, 인라인 처리 안 함) → 자리표시자
   const codes = [];
+  const NUL = String.fromCharCode(0), PH = n => NUL+n+NUL;
   text = text.replace(/`([^`]+)`/g, (m, c) => {
     const t = c.trim();
     const lm = /^\[(.+)\]$/.exec(t);          // [사실] 같은 라벨에서 대괄호 제거
@@ -464,9 +475,16 @@ function inline(text){
     else html = '<code>'+esc(c)+'</code>';
     codes.push(html); return '\u0000'+(codes.length-1)+'\u0000';
   });
+  // 이미지 ![대체텍스트](src "제목") — src 보존 위해 esc 전에 자리표시자로 추출.
+  text = text.replace(/!\[([^\]]*)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)/g, (m, alt, src, title) => {
+    const tt = title ? ' title="'+attr(title)+'"' : '';
+    codes.push('<img src="'+src+'" alt="'+attr(alt)+'"'+tt+'>');
+    return PH(codes.length-1);
+  });
   text = esc(text);
   text = text.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
   text = text.replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>');
+  text = text.replace(/~~([^~]+)~~/g, '<del>$1</del>');
   // 링크 [텍스트](url "제목") — 이미지(! 앞)는 제외. 외부 http 는 새 탭, 로컬은 같은 탭.
   text = text.replace(/(^|[^!])\[([^\]]+)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)/g, (m, pre, txt, href, title) => {
     const ext = /^(https?:|mailto:|\/\/)/i.test(href);
@@ -481,6 +499,26 @@ function inline(text){
 function slug(s){
   return s.toLowerCase().replace(/<[^>]+>/g,'').replace(/[^\w\uac00-\ud7a3\s-]/g,'')
     .trim().replace(/\s+/g,'-').slice(0,60) || 'h';
+}
+
+// 목록 렌더 — 들여쓰기로 중첩, 줄당 한 항목, 체크박스 지원
+function renderList(items){
+  let out = ''; const stack = [];   // stack: [{indent, ordered}]
+  const closeTo = n => { while (stack.length > n){ const t = stack.pop();
+    out += '</li>' + (t.ordered ? '</ol>' : '</ul>'); } };
+  items.forEach(it => {
+    while (stack.length && it.indent < stack[stack.length-1].indent) closeTo(stack.length-1);
+    const top = stack[stack.length-1];
+    if (top && it.indent <= top.indent){ out += '</li>'; }
+    else { stack.push({ indent: it.indent, ordered: it.ordered });
+           out += it.ordered ? '<ol>' : '<ul>'; }
+    const cb = /^\[([ xX])\]\s+([\s\S]*)$/.exec(it.text);
+    if (cb){ const ck = cb[1].toLowerCase()==='x' ? ' checked' : '';
+      out += '<li class="task"><input type="checkbox" disabled'+ck+'> '+inline(cb[2]); }
+    else { out += '<li>'+inline(it.text); }
+  });
+  closeTo(0);
+  return out;
 }
 
 function parseMarkdown(md){
@@ -498,7 +536,7 @@ function parseMarkdown(md){
       i++; html += '<pre><code>'+esc(buf.join('\n'))+'</code></pre>'; continue;
     }
     // 헤딩
-    let h = /^(#{1,3})\s+(.*)$/.exec(line);
+    let h = /^(#{1,6})\s+(.*)$/.exec(line);
     if (h){
       const lv = h[1].length, txt = inline(h[2].trim());
       const id = mkId(slug(h[2]));
@@ -528,19 +566,24 @@ function parseMarkdown(md){
         + '</tr></thead><tbody>'+body+'</tbody></table></div>';
       continue;
     }
-    // 목록
-    if (/^[-*]\s+/.test(line)){
-      let buf = '';
-      while (i < lines.length && /^[-*]\s+/.test(lines[i])){
-        buf += '<li>'+inline(lines[i].replace(/^[-*]\s+/,''))+'</li>'; i++;
+    // 목록 (순서/비순서 · 중첩 · 체크박스)
+    const liRe = /^(\s*)([-*]|\d+\.)\s+(.*)$/;
+    if (liRe.test(line)){
+      const items = [];
+      while (i < lines.length){
+        const m = liRe.exec(lines[i]);
+        if (!m) break;
+        items.push({ indent: m[1].replace(/\t/g,'    ').length,
+                     ordered: /\d/.test(m[2]), text: m[3] });
+        i++;
       }
-      html += '<ul>'+buf+'</ul>'; continue;
+      html += renderList(items); continue;
     }
     // 빈 줄
     if (/^\s*$/.test(line)){ i++; continue; }
     // 단락(연속 비빈 줄 묶기)
     let buf = [];
-    while (i < lines.length && !/^\s*$/.test(lines[i]) && !/^(#{1,3}\s|>|```|\||[-*]\s|---)/.test(lines[i])){
+    while (i < lines.length && !/^\s*$/.test(lines[i]) && !/^(#{1,6}\s|>|```|\||\s*[-*]\s|\s*\d+\.\s|---)/.test(lines[i])){
       buf.push(lines[i]); i++;
     }
     if (buf.length) html += '<p>'+inline(buf.join(' '))+'</p>';
