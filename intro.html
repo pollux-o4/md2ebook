@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>md2ebook — 마크다운을 한 장의 책으로</title>
-<meta name="description" content="마크다운 한 편을 외부 의존성 0의 오프라인 단일 HTML 책 리더로 바꾸는 Agent Skill. CDN·번들러·런타임 없이 파일 하나, 폰에서도 그냥." />
+<meta name="description" content="마크다운 한 편을 외부 의존성 0의 오프라인 단일 HTML 책 리더(reader)로 바꾸는 Agent Skill. CDN·번들러·런타임 없이 파일 하나, 폰에서도 바로." />
 <style>
 /* =========================================================================
    md2ebook 소개 랜딩 — reader 의 paper 테마를 재사용한 단일 자기완결 HTML.
@@ -130,7 +130,27 @@ body::before{ content:""; position:fixed; inset:0; z-index:-1; pointer-events:no
 .lbl.guess{ color:var(--chip-guess); background:var(--chip-guess-bg); }
 .lbl.op{ color:var(--chip-op); background:var(--chip-op-bg); }
 .lbl.none{ color:var(--chip-none); background:var(--chip-none-bg); }
+/* 예약어 외 라벨: 단어 해시로 정해진 hue(--h) 자동 배정 — reader 와 동일 색식 */
+.lbl.auto{ color:hsl(var(--h) 48% 34%); background:hsl(var(--h) 45% 46% / .14); }
 .chip-demo{ display:flex; flex-wrap:wrap; gap:7px; margin-top:13px; }
+
+/* 만드는 법 시각화: 마크다운 입력(모노) → 색칩 결과 */
+.lbl-make{ margin-top:14px; display:grid; grid-template-columns:1fr auto 1fr; align-items:center;
+  gap:10px; }
+.lbl-make .in,
+.lbl-make .out{ background:var(--code-bg); border:1px solid var(--page-edge); border-radius:9px;
+  padding:11px 12px; min-height:46px; display:flex; flex-wrap:wrap; align-items:center; gap:7px; }
+.lbl-make .in{ font-family:var(--font-mono); font-size:13px; color:var(--ink); line-height:1.5; }
+.lbl-make .out{ background:var(--page); }
+.lbl-make .lead{ font-size:11px; font-weight:600; letter-spacing:.04em; text-transform:uppercase;
+  color:var(--ink-soft); margin-bottom:6px; display:block; }
+.lbl-make .mk-arrow{ color:var(--accent); display:flex; align-items:center; justify-content:center; }
+.lbl-make .mk-arrow svg{ width:22px; height:22px; stroke:currentColor; fill:none; stroke-width:1.7;
+  stroke-linecap:round; stroke-linejoin:round; }
+@media (max-width:480px){
+  .lbl-make{ grid-template-columns:1fr; gap:6px; }
+  .lbl-make .mk-arrow{ transform:rotate(90deg); }
+}
 
 /* ============================ 라이브 데모 ============================ */
 .demos{ display:grid; grid-template-columns:repeat(auto-fit, minmax(250px,1fr)); gap:18px; }
@@ -189,7 +209,7 @@ body::before{ content:""; position:fixed; inset:0; z-index:-1; pointer-events:no
   <div class="wrap">
     <span class="eyebrow">오프라인 · 단일 HTML · 의존성 0</span>
     <h1>마크다운 한 편,<br><span class="em">한 장의 책</span>.</h1>
-    <p class="sub">쓰던 <code style="font-family:var(--font-mono);font-size:.9em;background:var(--code-bg);padding:.1em .4em;border-radius:5px">.md</code> 한 편이 페이지 넘기는 책 리더 HTML 로. CDN도 번들러도 런타임도 없이 <strong>파일 하나</strong>, 폰에서도 그냥.</p>
+    <p class="sub">쓰던 <code style="font-family:var(--font-mono);font-size:.9em;background:var(--code-bg);padding:.1em .4em;border-radius:5px">.md</code> 한 편이 페이지 넘기는 책 리더(reader) HTML 로. CDN도 번들러도 런타임도 없이 <strong>파일 하나</strong>, 폰에서도 바로.</p>
 
     <div class="cta-row">
       <div class="install" id="install">
@@ -245,7 +265,7 @@ body::before{ content:""; position:fixed; inset:0; z-index:-1; pointer-events:no
 <section class="section" id="features">
   <div class="wrap">
     <div class="section-head">
-      <h2>읽는 사람을 먼저 생각한 리더</h2>
+      <h2>읽는 사람을 먼저 생각한 리더기</h2>
       <p>기능 목록이 아니라, 더 잘 읽히고 더 잘 공유되는 경험.</p>
     </div>
     <div class="cards">
@@ -270,13 +290,25 @@ body::before{ content:""; position:fixed; inset:0; z-index:-1; pointer-events:no
 
       <div class="card">
         <div class="ic"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M9 9h6v6H9z"/></svg></div>
-        <h3>근거가 한눈에 보이는 라벨</h3>
-        <p><code style="font-family:var(--font-mono);font-size:.85em;background:var(--code-bg);padding:.05em .35em;border-radius:4px">[사실]</code> 식 라벨을 색칩으로. 아무 단어나 라벨이 되고, 같은 단어는 늘 같은 색.</p>
-        <div class="chip-demo">
-          <span class="lbl fact">[사실]</span>
-          <span class="lbl guess">[추정]</span>
-          <span class="lbl op">[의견]</span>
-          <span class="lbl none">[모름]</span>
+        <h3>단어를 감싸면 색 라벨로</h3>
+        <p>백틱으로 감싼 <code style="font-family:var(--font-mono);font-size:.85em;background:var(--code-bg);padding:.05em .35em;border-radius:4px">`[단어]`</code> 가 색칩으로 렌더. 아무 단어나 칩이 되고, 같은 단어는 늘 같은 색. <code style="font-family:var(--font-mono);font-size:.85em;background:var(--code-bg);padding:.05em .35em;border-radius:4px">[사실]</code> <code style="font-family:var(--font-mono);font-size:.85em;background:var(--code-bg);padding:.05em .35em;border-radius:4px">[추정]</code> 같은 내장 프리셋도, 색은 리더에서 직접 조정.</p>
+        <div class="lbl-make">
+          <div class="in">
+            <span class="lead">마크다운</span>
+            `[중요]` `[TODO]` `[디자인]` `[사실]`
+          </div>
+          <div class="mk-arrow" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg>
+          </div>
+          <div class="out">
+            <span class="lead">리더</span>
+            <span class="chip-demo" style="margin-top:0">
+              <span class="lbl auto" style="--h:8">[중요]</span>
+              <span class="lbl auto" style="--h:265">[TODO]</span>
+              <span class="lbl auto" style="--h:200">[디자인]</span>
+              <span class="lbl fact">[사실]</span>
+            </span>
+          </div>
         </div>
       </div>
 
