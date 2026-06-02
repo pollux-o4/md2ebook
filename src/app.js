@@ -285,11 +285,16 @@ function disconnectScrollObserver(){
   scrollHeadings = []; scrollAboveTop.clear();
 }
 
+// 진행바·페이지수만 즉시 칠한다(넘김 시작 시 호출 → 게이지가 클릭에 바로 반응).
+function paintProgress(idx){
+  const total = pages.length;
+  $('#metaPage').textContent = (idx+1) + ' / ' + total;
+  $('#progFill').style.width = total>1 ? (idx/(total-1)*100)+'%' : '100%';
+}
+
 function updateChrome(){
   if (settings.flip === 'scroll'){ updateChromeScroll(); return; }
-  const total = pages.length;
-  $('#metaPage').textContent = (current+1) + ' / ' + total;
-  $('#progFill').style.width = total>1 ? (current/(total-1)*100)+'%' : '100%';
+  paintProgress(current);
   // 현재 챕터(가장 가까운 H1/H2)
   let chap = '';
   for (let i = current; i >= 0; i--){
@@ -375,6 +380,7 @@ function go(dir){
   const mode = settings.flip;
   if (mode === 'scroll'){ current = target; renderBase(); updateChrome(); return; }
   animating = true;
+  paintProgress(target);   // 게이지는 넘김 애니와 동시에 글라이드 → 클릭에 즉시 반응
   prepareTurn(dir, mode);
   tween(0, 1, 360, p => applyTurn(p, dir, mode), () => {
     current = target;
@@ -500,6 +506,7 @@ stage.addEventListener('pointerup', e => {
   animating = true;
   const d = drag; drag = null;
   if (commit){
+    paintProgress(dir === 'next' ? current+1 : current-1);   // 게이지 즉시 반영
     tween(prog, 1, 240*(1-prog)+80, p => applyTurn(p, dir, mode), () => {
       current = dir === 'next' ? current+1 : current-1;
       renderBase(); endTurn();

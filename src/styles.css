@@ -96,6 +96,8 @@ body{ font-family:var(--reader-font); color:var(--ink); }
   background:color-mix(in srgb, var(--chrome-ink) 18%, transparent); overflow:hidden; }
 .prog-fill{ height:100%; width:0; background:var(--accent); border-radius:2px;
   transition:width var(--dur) ease; }
+/* 스크롤 모드: 진행바를 스크롤에 1:1 밀착(트랜지션 지연 제거 → 빠릿) */
+.scrollmode .prog-fill{ transition:none; }
 .prog-meta{ display:flex; justify-content:space-between; width:min(620px, 78%);
   font-size:11.5px; color:var(--chrome-ink); font-variant-numeric:tabular-nums; }
 .prog-meta .chap{ max-width:62%; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; opacity:.85; }
