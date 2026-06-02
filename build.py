@@ -20,6 +20,11 @@ import re
 import base64
 import pathlib
 
+try:
+    sys.stdout.reconfigure(encoding="utf-8")   # 콘솔 코드페이지와 무관하게 한글/기호 출력
+except Exception:
+    pass
+
 HERE = pathlib.Path(__file__).resolve().parent
 TEMPLATE = HERE / "reader.html"
 SRC = HERE / "src"
@@ -40,6 +45,9 @@ IMG_MIME = {
     ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
     ".gif": "image/gif", ".webp": "image/webp", ".svg": "image/svg+xml", ".bmp": "image/bmp",
 }
+# 인라인 크기 가드 — 이보다 큰 이미지는 단일 HTML 폭주를 막으려 인라인하지 않고
+# 파일 참조로 남긴 뒤 경고한다. 작게 넣고 싶으면 사전 최적화하거나 webp 로 넣으면 된다.
+IMG_INLINE_MAX = 1_500_000  # bytes (~1.5MB)
 
 
 def rewrite_md_links(md, base_dir):
@@ -61,7 +69,8 @@ def rewrite_md_links(md, base_dir):
 
 def inline_images(md, base_dir):
     """로컬 이미지 파일을 base64 data-URI 로 인라인한다 → 결과 HTML 이 자기완결(단일 파일).
-    외부 URL·data: URI·없는 파일·미지원 확장자는 건드리지 않는다."""
+    외부 URL·data: URI·없는 파일·미지원 확장자는 건드리지 않는다.
+    IMG_INLINE_MAX 보다 큰 파일은 인라인하지 않고 파일 참조로 남기며 경고한다."""
     def repl(m):
         pre, src, title, close = m.group(1), m.group(2), m.group(3), m.group(4)
         if re.match(r'^(https?:|//|data:|mailto:|#)', src, re.I):
@@ -72,6 +81,12 @@ def inline_images(md, base_dir):
             return m.group(0)
         f = base_dir / path
         if not f.is_file():
+            return m.group(0)
+        size = f.stat().st_size
+        if size > IMG_INLINE_MAX:
+            print(f"warn: {path} ({size // 1024} KB) > 인라인 한도 "
+                  f"({IMG_INLINE_MAX // 1024} KB), 파일 참조로 두고 인라인 생략 "
+                  f"(줄이거나 webp 로 넣으면 인라인됨)")
             return m.group(0)
         b64 = base64.b64encode(f.read_bytes()).decode("ascii")
         return pre + "data:" + mime + ";base64," + b64 + title + close
