@@ -59,8 +59,11 @@ body::before{ content:""; position:fixed; inset:0; z-index:-1; pointer-events:no
 .hero h1{ font-size:clamp(34px,6.2vw,60px); line-height:1.12; letter-spacing:-.025em;
   font-weight:700; margin:0 0 .42em; }
 .hero h1 .em{ color:var(--accent-deep); }
-.hero .sub{ font-size:clamp(16px,2.4vw,20px); color:var(--ink-soft); max-width:42ch;
+.hero .sub{ font-size:clamp(16px,2.4vw,20px); color:var(--ink-soft);
   margin:0 auto; line-height:1.65; }
+/* 첫 문장은 데스크탑에서 한 줄(고아 줄바꿈 방지), 좁은 화면에선 자연 줄바꿈 */
+.hero .sub-lead{ white-space:nowrap; }
+@media (max-width:520px){ .hero .sub-lead{ white-space:normal; } }
 /* 보조문구 둘째 줄 — 살짝 띄우고 톤다운해 구분감 */
 .hero .sub-note{ display:block; margin-top:10px; font-size:.9em; opacity:.72; }
 
@@ -211,7 +214,7 @@ body::before{ content:""; position:fixed; inset:0; z-index:-1; pointer-events:no
   <div class="wrap">
     <span class="eyebrow">오프라인 · 단일 HTML · 의존성 0</span>
     <h1>마크다운 한 편,<br><span class="em">한 장의 책</span>.</h1>
-    <p class="sub">쓰던 <code style="font-family:var(--font-mono);font-size:.9em;background:var(--code-bg);padding:.1em .4em;border-radius:5px">.md</code> 한 편이 페이지 넘기는 책 리더(reader) HTML 로.<span class="sub-note">CDN도 번들러도 런타임도 없이 <strong>파일 하나</strong>, 폰에서도 바로.</span></p>
+    <p class="sub"><span class="sub-lead">쓰던 <code style="font-family:var(--font-mono);font-size:.9em;background:var(--code-bg);padding:.1em .4em;border-radius:5px">.md</code> 한 편이 페이지 넘기는 책 리더(reader) HTML 으로.</span><span class="sub-note">CDN도 번들러도 런타임도 없이 <strong>파일 하나</strong>, 폰에서도 바로.</span></p>
 
     <div class="cta-row">
       <div class="install" id="install">
@@ -335,7 +338,7 @@ body::before{ content:""; position:fixed; inset:0; z-index:-1; pointer-events:no
   <div class="wrap">
     <div class="section-head">
       <h2>말보다, 직접 넘겨보기</h2>
-      <p>실제 사용 문서를 그대로 리더로 변환한 결과물. 같은 폴더에서 바로.</p>
+      <p>문서 → 리더(reader) 변환 결과를 직접 넘겨보며 확인해보세요. </p>
     </div>
     <div class="demos">
 
