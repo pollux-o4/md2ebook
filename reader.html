@@ -296,6 +296,8 @@ body{ font-family:var(--reader-font); color:var(--ink); }
 
 한 문장 안에서 **굵게**와 *기울임*, 그리고 인라인 `코드` 가 모두 살아 있는지 본다. 셋이 나란히 놓여도 무너지지 않아야 한다.
 
+링크도 확인한다. [외부 링크](https://example.com) 는 새 탭에서 열리고, [옆 문서](README.md) 처럼 `.md` 를 가리키는 링크는 같은 이름 `.html` 이 있으면 그쪽으로 연결된다.
+
 ## 2. 근거 라벨 칩
 
 네 종류의 근거 라벨이 빠짐없이 고정 색칩으로 떠야 한다.
@@ -476,6 +478,13 @@ function inline(text){
   text = esc(text);
   text = text.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
   text = text.replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>');
+  // 링크 [텍스트](url "제목") — 이미지(! 앞)는 제외. 외부 http 는 새 탭, 로컬은 같은 탭.
+  text = text.replace(/(^|[^!])\[([^\]]+)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)/g, (m, pre, txt, href, title) => {
+    const ext = /^(https?:|mailto:|\/\/)/i.test(href);
+    const tgt = ext ? ' target="_blank" rel="noopener noreferrer"' : '';
+    const tt = title ? ' title="'+title+'"' : '';
+    return pre + '<a href="'+href+'"'+tgt+tt+'>'+txt+'</a>';
+  });
   text = text.replace(/\u0000(\d+)\u0000/g, (m, i) => codes[+i]);
   return text;
 }

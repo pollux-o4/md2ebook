@@ -21,6 +21,25 @@ BLOCK = re.compile(
     r'(<script type="text/markdown" id="book-md">)(.*?)(</script>)',
     re.DOTALL,
 )
+# 링크 타깃 — ](url "제목") 형태
+LINK = re.compile(r'\]\(\s*([^)\s]+)(\s+"[^"]*")?\s*\)')
+
+
+def rewrite_md_links(md, base_dir):
+    """`.md` 링크는 같은 위치에 `.html` 이 이미 있을 때만 그쪽으로 바꾼다.
+    외부 URL·없는 파일은 건드리지 않는다 (자동 변환·크롤링 없음)."""
+    def repl(m):
+        href, title = m.group(1), m.group(2) or ""
+        if re.match(r'^(https?:|//|mailto:|#)', href, re.I):
+            return m.group(0)
+        path, sep, frag = href.partition("#")
+        if not path.lower().endswith(".md"):
+            return m.group(0)
+        sibling = path[:-3] + ".html"
+        if (base_dir / sibling).is_file():
+            return "](" + sibling + (sep + frag if sep else "") + title + ")"
+        return m.group(0)
+    return LINK.sub(repl, md)
 
 
 def main(argv):
@@ -36,6 +55,7 @@ def main(argv):
         return 1
 
     md = md_path.read_text(encoding="utf-8")
+    md = rewrite_md_links(md, md_path.resolve().parent)
     tpl = TEMPLATE.read_text(encoding="utf-8")
     if not BLOCK.search(tpl):
         print("error: '<script type=text/markdown id=book-md>' block not found in reader.html")
