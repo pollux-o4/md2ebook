@@ -16,6 +16,7 @@ function hue(s){
   let h=0; for(let i=0;i<s.length;i++) h=(h*31+s.charCodeAt(i))>>>0; return h%360;
 }
 const usedLabels = new Set();   // 문서에 쓰인 커스텀(비시맨틱) 라벨 — 설정에서 색 조절용
+let taskIdx = 0;                 // 체크박스 안정 인덱스 (parseMarkdown 시작 시 0으로 리셋)
 function attr(s){ return esc(s).replace(/"/g,'&quot;'); }
 
 function inline(text){
@@ -71,7 +72,7 @@ function renderList(items){
            out += it.ordered ? '<ol>' : '<ul>'; }
     const cb = /^\[([ xX])\]\s+([\s\S]*)$/.exec(it.text);
     if (cb){ const ck = cb[1].toLowerCase()==='x' ? ' checked' : '';
-      out += '<li class="task"><input type="checkbox" disabled'+ck+'> '+inline(cb[2]); }
+      out += '<li class="task"><input type="checkbox" data-task-idx="'+(taskIdx++)+'"'+ck+'> '+inline(cb[2]); }
     else { out += '<li>'+inline(it.text); }
   });
   closeTo(0);
@@ -81,6 +82,7 @@ function renderList(items){
 function parseMarkdown(md){
   const lines = md.replace(/\r/g,'').split('\n');
   let html = '', i = 0; const usedIds = {};
+  taskIdx = 0;   // 체크박스 인덱스 리셋 — 같은 문서면 항상 동일한 idx 배정
   const mkId = base => { let id = base, n = 2; while(usedIds[id]){ id = base+'-'+n++; } usedIds[id]=1; return id; };
 
   while (i < lines.length){
@@ -90,7 +92,8 @@ function parseMarkdown(md){
     if (/^```/.test(line)){
       let buf = []; i++;
       while (i < lines.length && !/^```/.test(lines[i])){ buf.push(lines[i]); i++; }
-      i++; html += '<pre><code>'+esc(buf.join('\n'))+'</code></pre>'; continue;
+      i++; html += '<div class="codeblock"><button class="copy-btn" type="button">복사</button>'
+        + '<pre><code>'+esc(buf.join('\n'))+'</code></pre></div>'; continue;
     }
     // 헤딩
     let h = /^(#{1,6})\s+(.*)$/.exec(line);
@@ -177,6 +180,19 @@ const docTitle = h1 ? h1.textContent : '책';
 $('#docTitle').textContent = docTitle;
 document.title = docTitle + ' · 책 리더';
 
+/* 체크박스 상태: data-task-idx -> bool, 문서별 localStorage 영속화.
+   마크다운의 [x] 가 기본값, 저장된 값이 있으면 그것이 우선. */
+const STORE_TASKS = 'br-tasks:' + docTitle;
+let taskState = load(STORE_TASKS, {});
+if (!taskState || typeof taskState !== 'object') taskState = {};
+// 마운트된 패드의 체크박스에 저장된 상태를 재적용 (windowed mounting 대비 — 매 마운트마다 호출)
+function applyTasks(pad){
+  pad.querySelectorAll('input[type=checkbox][data-task-idx]').forEach(cb => {
+    const saved = taskState[cb.dataset.taskIdx];
+    if (saved !== undefined) cb.checked = !!saved;
+  });
+}
+
 let pages = [];        // {html, headings:[{id,level,text}]}
 const headingPage = {}; // id -> page index
 let current = 0;
@@ -217,10 +233,10 @@ const animLayer = $('#animLayer'), animShade = $('#animShade');
 const stage = $('#stage');
 let animating = false;
 
-function setHtml(pad, idx){ pad.innerHTML = (pages[idx] && pages[idx].html) || ''; pad.scrollTop = 0; }
+function setHtml(pad, idx){ pad.innerHTML = (pages[idx] && pages[idx].html) || ''; pad.scrollTop = 0; applyTasks(pad); }
 
 function renderBase(){
-  if (settings.flip === 'scroll'){ padBelow.innerHTML = sourceHtml; }
+  if (settings.flip === 'scroll'){ padBelow.innerHTML = sourceHtml; applyTasks(padBelow); }
   else { setHtml(padBelow, current); }
 }
 
@@ -332,6 +348,71 @@ function bounce(dir){
     el.style.transform = 'translateX('+o+'px)';
   }, () => { el.style.transform = ''; });
 }
+
+/* ---- 콘텐츠 인터랙션 (코드 복사 / 이미지 줌 / 체크박스) ----
+   page-pad 에 위임. 핸들러는 stopPropagation 으로 stage 의 페이지 넘김 클릭을 막는다. */
+
+// 이미지 라이트박스: 재사용 오버레이 1개
+let lightbox = null;
+function ensureLightbox(){
+  if (lightbox) return lightbox;
+  lightbox = document.createElement('div');
+  lightbox.className = 'lightbox';
+  lightbox.innerHTML = '<img alt="">';
+  lightbox.addEventListener('click', closeLightbox);
+  document.body.appendChild(lightbox);
+  return lightbox;
+}
+function openLightbox(src, alt){
+  const lb = ensureLightbox();
+  const img = lb.querySelector('img');
+  img.src = src; img.alt = alt || '';
+  lb.classList.add('show');
+}
+function closeLightbox(){ if (lightbox) lightbox.classList.remove('show'); }
+
+// 코드 복사: pre 의 textContent 를 클립보드로. file:// 대비 execCommand 폴백.
+function copyText(text, btn){
+  const done = () => { const o = btn.textContent; btn.textContent = '복사됨';
+    setTimeout(() => { btn.textContent = o; }, 1200); };
+  const fallback = () => {
+    const ta = document.createElement('textarea');
+    ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    try{ document.execCommand('copy'); done(); }catch(e){}
+    document.body.removeChild(ta);
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(done, fallback);
+  } else fallback();
+}
+
+function bindContent(pad){
+  pad.addEventListener('click', e => {
+    const btn = e.target.closest('.copy-btn');
+    if (btn){
+      e.stopPropagation(); e.preventDefault();
+      const pre = btn.parentElement.querySelector('pre');
+      if (pre) copyText(pre.textContent, btn);
+      return;
+    }
+    const img = e.target.closest('img');
+    if (img){ e.stopPropagation(); openLightbox(img.src, img.alt); return; }
+    const cb = e.target.closest('input[type=checkbox][data-task-idx]');
+    if (cb){ e.stopPropagation(); return; }   // 토글은 change 에서 처리, 넘김만 차단
+  });
+  pad.addEventListener('change', e => {
+    const cb = e.target.closest('input[type=checkbox][data-task-idx]');
+    if (!cb) return;
+    e.stopPropagation();
+    taskState[cb.dataset.taskIdx] = cb.checked;
+    save(STORE_TASKS, taskState);
+  });
+}
+bindContent(padBelow);
+bindContent(padAnim);
+
+window.addEventListener('keydown', e => { if (e.key === 'Escape') closeLightbox(); });
 
 /* ---- 드래그 / 스와이프 ---- */
 let drag = null;

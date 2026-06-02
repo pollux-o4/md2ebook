@@ -283,3 +283,27 @@ styles.css 에 `:root[data-theme="<name>"]{ --bg … }` 블록(24-59 형식) 추
 - no-python 수동 경로는 `.md→.html` 링크 재작성을 자동으로 못 함.
 - `reader.html` 직접 편집 금지 — 항상 `src/` → `--build-template`.
 - 본문 리터럴 `</script>` 는 빌드 시 이스케이프(build.py:91)되고 런타임 원복(app.js:168)된다 — 둘 중 하나만 바꾸면 깨진다.
+
+---
+
+## 9. Interactive features (코드 복사 / 이미지 줌 / 체크박스)
+
+런타임 콘텐츠 인터랙션 3종. 모두 **`.page-pad` 에 위임된 핸들러**로 동작하고, 핸들러는 `stopPropagation()` 으로 stage 의 페이지 넘김 클릭(app.js stage `click` 리스너)을 막는다. 위임 등록은 `bindContent(pad)` 한 함수에서 `padBelow`/`padAnim` 양쪽에 1회씩 — windowed mounting 으로 패드 내부 DOM 이 교체돼도 리스너는 패드 자체에 붙어 있어 유지된다.
+
+### 9.1 코드 복사 버튼
+
+- **파싱**: `parseMarkdown` 코드펜스 분기가 `<pre><code>` 를 `<div class="codeblock"><button class="copy-btn">복사</button><pre><code>…</pre></div>` 로 감싼다.
+- **동작**: `bindContent` 의 `click` 위임이 `.copy-btn` 을 잡아 형제 `<pre>` 의 `textContent` 를 `copyText()` 로 복사. `navigator.clipboard.writeText` 우선, 실패/부재 시 `document.execCommand('copy')` 폴백(`file://` 대비). 성공 시 라벨을 잠시 「복사됨」으로 바꿨다 복원.
+- **CSS**: `.page-pad .codeblock{position:relative}` + `.copy-btn{position:absolute;top/right}`.
+
+### 9.2 이미지 라이트박스
+
+- **동작**: `click` 위임이 콘텐츠 `<img>` 를 잡아 `openLightbox(src,alt)`. 오버레이는 `ensureLightbox()` 가 만드는 **재사용 단일 `.lightbox` 요소**(body 직속). 탭(오버레이 click) 또는 Escape(전역 keydown → `closeLightbox`)로 닫힘. data-URI 이미지도 `img.src` 그대로 쓰므로 동작.
+- **CSS**: 이미지 `cursor:zoom-in`, `.lightbox`/그 안 이미지 `cursor:zoom-out`, 배경은 `--overlay`.
+
+### 9.3 영속 체크박스
+
+- **파싱**: 모듈 레벨 `taskIdx` 카운터를 `parseMarkdown` 시작에서 0 으로 리셋, `renderList` 의 task 항목마다 `data-task-idx="N"` 부여(이제 `disabled` 아님).
+- **영속 키**: `STORE_TASKS = 'br-tasks:' + docTitle` (기존 `br-pos`/`br-settings` 명명 규약), 값은 `{idx: bool}` 맵. 마크다운의 `[x]` 가 기본값이고 저장값이 있으면 그것이 우선.
+- **저장**: `bindContent` 의 `change` 위임이 토글을 잡아 `taskState[idx]=checked` + `save(STORE_TASKS,…)`. `click` 위임도 체크박스를 잡아 `stopPropagation` 만(넘김 차단, 토글 자체는 네이티브 + change).
+- **remount 재적용(핵심)**: `applyTasks(pad)` 가 패드의 모든 `input[data-task-idx]` 에 저장 상태를 다시 입힌다. **매 마운트마다** 호출되도록 `setHtml`(페이지 모드)과 `renderBase`(scroll 모드)에 훅. 부팅 시 1회가 아니라 페이지가 마운트될 때마다 적용되는 게 windowed mounting 대응의 요점.
