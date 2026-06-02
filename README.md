@@ -36,8 +36,12 @@ python 이 없으면 `reader.html` 을 복사한 뒤, 그 안의
 | 파일 | 역할 |
 |---|---|
 | `SKILL.md` | 스킬 진입점 — 변환 절차·입력 규약 |
-| `reader.html` | 책 리더 템플릿 겸 데모 |
+| `reader.html` | 책 리더 템플릿 겸 데모 (아래 `src/` 조립 결과, 커밋됨) |
 | `build.py` | `python build.py <md> [out.html]` 변환기 |
+| `src/` | 리더 소스 모듈 — `template.html` · `styles.css` · `app.js` |
+| `test/` | 데모 빌드 산출물 (README·SKILL·test 를 리더로 변환) |
 | `test.md` | 예시 입력 |
+
+> **유지보수 메모.** 리더를 고칠 땐 `src/` 모듈을 수정하고 `python build.py --build-template` 로 `reader.html` 을 재조립한다. 최종 사용자는 이 단계가 필요 없다 — 조립본이 이미 커밋돼 있어 평소처럼 `reader.html` 만 쓰면 된다.
 
 리더 디자인은 [Claude Design](https://claude.ai/design) 핸드오프 번들을 채택했다.

@@ -6,9 +6,14 @@ reader.html(템플릿) 안의 마크다운 블록만 입력 .md 내용으로 교
 
 사용법:
     python build.py <문서.md> [출력.html]
+    python build.py --build-template      # src/ 모듈 → reader.html 재조립(유지보수용)
 
 출력 경로를 생략하면 <문서>.html 로 저장한다.
 예:  python build.py ../docs/research.md research.html
+
+[유지보수] reader.html 은 src/ 모듈(template.html·styles.css·app.js)을 조립한
+단일 파일이다. src/ 를 고친 뒤 `python build.py --build-template` 로 재조립한다.
+최종 사용자는 이 단계가 필요 없다 — 조립본 reader.html 이 이미 커밋돼 있다.
 """
 import sys
 import re
@@ -16,6 +21,10 @@ import pathlib
 
 HERE = pathlib.Path(__file__).resolve().parent
 TEMPLATE = HERE / "reader.html"
+SRC = HERE / "src"
+# template.html 안의 주입 마커 — 조립 시 모듈 내용으로 치환.
+STYLE_MARK = "/*__STYLES__*/"
+APP_MARK = "//__APP__"
 # reader.html 안의 콘텐츠 블록. 마커는 보존하고 내용만 바꾼다.
 BLOCK = re.compile(
     r'(<script type="text/markdown" id="book-md">)(.*?)(</script>)',
@@ -42,9 +51,26 @@ def rewrite_md_links(md, base_dir):
     return LINK.sub(repl, md)
 
 
+def assemble_template():
+    """src/ 모듈을 조립해 단일 reader.html 로 쓴다. (유지보수용)"""
+    tpl = (SRC / "template.html").read_text(encoding="utf-8")
+    css = (SRC / "styles.css").read_text(encoding="utf-8").rstrip("\n")
+    js = (SRC / "app.js").read_text(encoding="utf-8").rstrip("\n")
+    if STYLE_MARK not in tpl or APP_MARK not in tpl:
+        print(f"error: markers not found in {SRC/'template.html'}")
+        return 2
+    out = tpl.replace(STYLE_MARK, css, 1).replace(APP_MARK, js, 1)
+    TEMPLATE.write_text(out, encoding="utf-8")
+    print(f"OK  src/ -> {TEMPLATE} ({len(out)} chars)")
+    return 0
+
+
 def main(argv):
+    if len(argv) >= 2 and argv[1] in ("--build-template", "-t"):
+        return assemble_template()
     if len(argv) < 2:
         print("usage: python build.py <input.md> [output.html]")
+        print("       python build.py --build-template   (src/ -> reader.html)")
         return 1
     md_path = pathlib.Path(argv[1])
     if not md_path.is_file():
