@@ -118,9 +118,13 @@ python build.py guide.md guide.html
 
 ### 이미지 탭 확대
 
-이미지는 탭하면 크게 확대돼요. 작게 들어간 그림도 자세히 들여다볼 수 있어요. 아래 그림을 한 번 탭해 보세요.
+이미지는 탭하면 크게 확대돼요. 작게 들어간 그림도 자세히 들여다볼 수 있어요. 가로로 길든 세로로 길든 본문 폭에 맞춰 들어오고, 세로로 긴 그림은 화면 높이를 넘지 않게 담겨요. 아래 그림들을 한 번 탭해 보세요.
 
-![예시 그림](data:image/svg+xml;utf8,<svg%20xmlns='http://www.w3.org/2000/svg'%20width='480'%20height='220'><rect%20width='480'%20height='220'%20rx='14'%20fill='%23efe8d8'/><circle%20cx='150'%20cy='84'%20r='30'%20fill='%23cdbf9f'/><path%20d='M60%20180%20L190%2090%20L290%20150%20L370%20100%20L430%20180%20Z'%20fill='%239c6b3f'/></svg>)
+![가로형 컨셉 이미지](img/concept-wide.jpeg)
+
+![정사각 컨셉 이미지](img/concept-square.jpeg)
+
+![세로형 컨셉 이미지](img/concept-tall.jpeg)
 
 ### 체크박스 토글
 

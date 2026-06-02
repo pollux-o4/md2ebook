@@ -17,6 +17,7 @@ reader.html(템플릿) 안의 마크다운 블록만 입력 .md 내용으로 교
 """
 import sys
 import re
+import base64
 import pathlib
 
 HERE = pathlib.Path(__file__).resolve().parent
@@ -32,6 +33,13 @@ BLOCK = re.compile(
 )
 # 링크 타깃 — ](url "제목") 형태
 LINK = re.compile(r'\]\(\s*([^)\s]+)(\s+"[^"]*")?\s*\)')
+# 이미지 — ![대체](src "제목"). src/title 보존하며 src 만 교체할 수 있게 그룹 분리.
+IMG = re.compile(r'(!\[[^\]]*\]\()\s*([^)\s]+)((?:\s+"[^"]*")?)\s*(\))')
+# 인라인 대상 이미지 확장자 → MIME
+IMG_MIME = {
+    ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+    ".gif": "image/gif", ".webp": "image/webp", ".svg": "image/svg+xml", ".bmp": "image/bmp",
+}
 
 
 def rewrite_md_links(md, base_dir):
@@ -49,6 +57,25 @@ def rewrite_md_links(md, base_dir):
             return "](" + sibling + (sep + frag if sep else "") + title + ")"
         return m.group(0)
     return LINK.sub(repl, md)
+
+
+def inline_images(md, base_dir):
+    """로컬 이미지 파일을 base64 data-URI 로 인라인한다 → 결과 HTML 이 자기완결(단일 파일).
+    외부 URL·data: URI·없는 파일·미지원 확장자는 건드리지 않는다."""
+    def repl(m):
+        pre, src, title, close = m.group(1), m.group(2), m.group(3), m.group(4)
+        if re.match(r'^(https?:|//|data:|mailto:|#)', src, re.I):
+            return m.group(0)
+        path = src.split("#", 1)[0].split("?", 1)[0]
+        mime = IMG_MIME.get(pathlib.Path(path).suffix.lower())
+        if not mime:
+            return m.group(0)
+        f = base_dir / path
+        if not f.is_file():
+            return m.group(0)
+        b64 = base64.b64encode(f.read_bytes()).decode("ascii")
+        return pre + "data:" + mime + ";base64," + b64 + title + close
+    return IMG.sub(repl, md)
 
 
 def assemble_template():
@@ -81,7 +108,9 @@ def main(argv):
         return 1
 
     md = md_path.read_text(encoding="utf-8")
-    md = rewrite_md_links(md, md_path.resolve().parent)
+    base_dir = md_path.resolve().parent
+    md = rewrite_md_links(md, base_dir)
+    md = inline_images(md, base_dir)            # 로컬 이미지 → data-URI (단일 파일 유지)
     tpl = TEMPLATE.read_text(encoding="utf-8")
     if not BLOCK.search(tpl):
         print("error: '<script type=text/markdown id=book-md>' block not found in reader.html")
