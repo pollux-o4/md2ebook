@@ -10,7 +10,7 @@ npx skills add pollux-o4/md2ebook
 ```
 
 `npx skills` 를 쓰는 에이전트(Claude Code · Codex · Gemini CLI 등)에 설치된다.
-설치 후 에이전트에게 `/md-ebook` 으로 부르면, `.md` 를 책 리더 HTML 로 변환해 준다.
+설치 후 에이전트에게 `/md2ebook` 으로 부르면, `.md` 를 책 리더 HTML 로 변환해 준다.
 
 ## 직접 변환 (에이전트 없이)
 
