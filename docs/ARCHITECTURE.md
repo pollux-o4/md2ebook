@@ -307,3 +307,17 @@ styles.css 에 `:root[data-theme="<name>"]{ --bg … }` 블록(24-59 형식) 추
 - **영속 키**: `STORE_TASKS = 'br-tasks:' + docTitle` (기존 `br-pos`/`br-settings` 명명 규약), 값은 `{idx: bool}` 맵. 마크다운의 `[x]` 가 기본값이고 저장값이 있으면 그것이 우선.
 - **저장**: `bindContent` 의 `change` 위임이 토글을 잡아 `taskState[idx]=checked` + `save(STORE_TASKS,…)`. `click` 위임도 체크박스를 잡아 `stopPropagation` 만(넘김 차단, 토글 자체는 네이티브 + change).
 - **remount 재적용(핵심)**: `applyTasks(pad)` 가 패드의 모든 `input[data-task-idx]` 에 저장 상태를 다시 입힌다. **매 마운트마다** 호출되도록 `setHtml`(페이지 모드)과 `renderBase`(scroll 모드)에 훅. 부팅 시 1회가 아니라 페이지가 마운트될 때마다 적용되는 게 windowed mounting 대응의 요점.
+
+---
+
+## 10. Performance notes
+
+핫패스 위주의 성능·정리 변경 요약(동작 보존, `sourceHtml` 불변). 새 의존성 없음.
+
+- **`paginate()` 증분 DOM**: 측정 패드 갱신을 노드 묶음 전체의 문자열 재직렬화 대신 `appendChild` 누적으로 처리한다 — 노드당 재직렬화 없는 O(n) `appendChild`. 묶음이 길어질수록 이득.
+- **`inline()` 정규식 호이스팅**: 코드·이미지·bold/em/del·링크·자리표시자 복원 정규식은 매 호출 재컴파일되던 리터럴을 **모듈 스코프 상수로 끌어올렸다**. 줄 수가 많은 문서에서 `inline()` 호출당 컴파일 비용 제거.
+- **NUL 자리표시자 단일 출처(`NUL`/`PH`/`RE_PH`)**: 널바이트 자리표시자를 `NUL`(문자)·`PH`(생성)·`RE_PH`(복원 정규식) **한 곳에서만 정의**해 추출·복원이 어긋날 여지를 없앴다. 이전엔 추출 쪽 리터럴(`'\0'`)과 복원 정규식이 따로 박혀 있었다.
+- **scroll 모드 현재 헤딩 = IntersectionObserver**: scroll 모드의 활성 헤딩 판정을 스크롤마다 전 헤딩 `offsetTop` 을 재는 방식에서 **`IntersectionObserver`** 로 바꿨다 — per-scroll 레이아웃 측정 제거.
+- **넘김 애니메이션 리셋 = `endTurn()`**: 넘김 종료 시 레이어 transform/transition·z-index 등 상태 복원을 **`endTurn()` 한 곳으로 모았다**(중복 리셋 경로 제거, 정합성 보장).
+- **트윈 워치독 정리**: 넘김 트윈의 안전망 타이머(watchdog)를 트윈 정상 종료 시 **반드시 `clearTimeout`** 한다 — 누수·중복 콜백 방지.
+- **문서별 localStorage 키 = `docKey()`**: `br-pos`/`br-tasks` 의 `:<docTitle>` 접미사 조합을 인라인 문자열 연결 대신 **`docKey()` 한 함수**로 단일화(키 명명 규약 일원화). (충돌 동작 자체는 GOTCHAS B 참조 — H1 같으면 여전히 공유)
