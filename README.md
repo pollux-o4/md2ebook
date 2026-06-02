@@ -1,7 +1,7 @@
 # md2ebook
 
-마크다운 한 편을 **오프라인 단일 HTML 책 리더**로 바꾸는 [Agent Skill](https://github.com/vercel-labs/skills).
-외부 라이브러리·CDN·빌드도구 0 — 폰에서도 파일 하나로 열린다.
+마크다운 한 편을 **오프라인 단일 HTML 책 리더**로 만들어 주는 [Agent Skill](https://github.com/vercel-labs/skills).
+외부 라이브러리도, CDN도, 빌드 도구도 필요 없다 — 폰에서도 파일 하나만 열면 끝.
 
 ## 설치
 
@@ -9,8 +9,8 @@
 npx skills add pollux-o4/md2ebook
 ```
 
-`npx skills` 를 쓰는 에이전트(Claude Code · Codex · Gemini CLI 등)에 설치된다.
-설치 후 에이전트에게 `/md2ebook` 으로 부르면, `.md` 를 책 리더 HTML 로 변환해 준다.
+`npx skills` 를 쓰는 에이전트(Claude Code · Codex · Gemini CLI 등)라면 어디든 설치된다.
+설치 후 에이전트에게 `/md2ebook` 으로 부르면 `.md` 를 책 리더 HTML 로 변환해 준다.
 
 ## 직접 변환 (에이전트 없이)
 
@@ -20,8 +20,8 @@ python 이 있으면 한 줄:
 python build.py <문서.md> [출력.html]
 ```
 
-없으면 `reader.html` 을 복사해 안의
-`<script type="text/markdown" id="book-md"> … </script>` 블록 내용만 `.md` 원문으로 갈아끼우면 된다. (둘 다 결과물 동일)
+python 이 없으면 `reader.html` 을 복사한 뒤, 그 안의
+`<script type="text/markdown" id="book-md"> … </script>` 블록 내용만 `.md` 원문으로 갈아끼우면 된다. (어느 쪽이든 결과물은 같다)
 
 ## 리더 기능
 
