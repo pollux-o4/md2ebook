@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>md2ebook — 마크다운을 한 장의 책으로</title>
-<meta name="description" content="마크다운 한 편을 외부 의존성 0의 오프라인 단일 HTML 책 리더로 바꿔주는 Agent Skill. CDN·번들러·런타임 없이 파일 하나, 폰에서도 열린다." />
+<meta name="description" content="마크다운 한 편을 외부 의존성 0의 오프라인 단일 HTML 책 리더로 바꾸는 Agent Skill. CDN·번들러·런타임 없이 파일 하나, 폰에서도 그냥." />
 <style>
 /* =========================================================================
    md2ebook 소개 랜딩 — reader 의 paper 테마를 재사용한 단일 자기완결 HTML.
@@ -188,8 +188,8 @@ body::before{ content:""; position:fixed; inset:0; z-index:-1; pointer-events:no
 <section class="hero">
   <div class="wrap">
     <span class="eyebrow">오프라인 · 단일 HTML · 의존성 0</span>
-    <h1>마크다운 한 편을<br><span class="em">한 장의 책</span>으로.</h1>
-    <p class="sub">쓰던 <code style="font-family:var(--font-mono);font-size:.9em;background:var(--code-bg);padding:.1em .4em;border-radius:5px">.md</code> 를 페이지 넘기는 책 리더 HTML 로. CDN도 번들러도 런타임도 없이 <strong>파일 하나</strong>라, 폰에서도 그냥 열린다.</p>
+    <h1>마크다운 한 편,<br><span class="em">한 장의 책</span>.</h1>
+    <p class="sub">쓰던 <code style="font-family:var(--font-mono);font-size:.9em;background:var(--code-bg);padding:.1em .4em;border-radius:5px">.md</code> 한 편이 페이지 넘기는 책 리더 HTML 로. CDN도 번들러도 런타임도 없이 <strong>파일 하나</strong>, 폰에서도 그냥.</p>
 
     <div class="cta-row">
       <div class="install" id="install">
@@ -246,7 +246,7 @@ body::before{ content:""; position:fixed; inset:0; z-index:-1; pointer-events:no
   <div class="wrap">
     <div class="section-head">
       <h2>읽는 사람을 먼저 생각한 리더</h2>
-      <p>기능 목록이 아니라, 글이 더 잘 읽히고 더 잘 공유되는 경험.</p>
+      <p>기능 목록이 아니라, 더 잘 읽히고 더 잘 공유되는 경험.</p>
     </div>
     <div class="cards">
 
@@ -259,7 +259,7 @@ body::before{ content:""; position:fixed; inset:0; z-index:-1; pointer-events:no
       <div class="card">
         <div class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/></svg></div>
         <h3>눈이 편한 4가지 테마</h3>
-        <p>paper · sepia · gray · black. 글자 크기·줄간격·고딕/명조까지 조절하고, 그 설정을 기억한다.</p>
+        <p>paper · sepia · gray · black. 글자 크기·줄간격·고딕/명조까지 손끝에서, 그 설정 그대로 기억.</p>
       </div>
 
       <div class="card">
@@ -273,10 +273,10 @@ body::before{ content:""; position:fixed; inset:0; z-index:-1; pointer-events:no
         <h3>근거가 한눈에 보이는 라벨</h3>
         <p><code style="font-family:var(--font-mono);font-size:.85em;background:var(--code-bg);padding:.05em .35em;border-radius:4px">[사실]</code> 식 라벨을 색칩으로. 아무 단어나 라벨이 되고, 같은 단어는 늘 같은 색.</p>
         <div class="chip-demo">
-          <span class="lbl fact">사실</span>
-          <span class="lbl guess">추정</span>
-          <span class="lbl op">의견</span>
-          <span class="lbl none">모름</span>
+          <span class="lbl fact">[사실]</span>
+          <span class="lbl guess">[추정]</span>
+          <span class="lbl op">[의견]</span>
+          <span class="lbl none">[모름]</span>
         </div>
       </div>
 
@@ -288,7 +288,7 @@ body::before{ content:""; position:fixed; inset:0; z-index:-1; pointer-events:no
 
       <div class="card">
         <div class="ic"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h8"/></svg></div>
-        <h3>본문 그대로 살아있다</h3>
+        <h3>죽지 않은 본문</h3>
         <p>데스크탑 선택·복사, 모바일 스와이프 넘김. 코드블록 복사 버튼, 이미지 탭 확대까지.</p>
       </div>
 
@@ -301,28 +301,21 @@ body::before{ content:""; position:fixed; inset:0; z-index:-1; pointer-events:no
   <div class="wrap">
     <div class="section-head">
       <h2>말보다, 직접 넘겨보기</h2>
-      <p>이 프로젝트의 문서를 그대로 리더로 변환한 결과물. 같은 폴더에서 바로 열린다.</p>
+      <p>실제 사용 문서를 그대로 리더로 변환한 결과물. 같은 폴더에서 바로.</p>
     </div>
     <div class="demos">
 
+      <a class="demo" href="./demo/guide.html">
+        <span class="tag">데모</span>
+        <h3>md2ebook 사용 가이드</h3>
+        <p>설치부터 변환·읽기까지 한 편으로. 넘김·테마·목차·라벨 칩을 그대로 만져보는 실제 문서.</p>
+        <span class="open">열기 <svg viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg></span>
+      </a>
+
       <a class="demo" href="./README.html">
         <span class="tag">쇼케이스</span>
-        <h3>README, 책으로 읽기</h3>
-        <p>지금 보는 소개 문서를 리더로 변환한 버전. 넘김·테마·목차를 직접 만져보기.</p>
-        <span class="open">열기 <svg viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg></span>
-      </a>
-
-      <a class="demo" href="./test/test.html">
-        <span class="tag">데모</span>
-        <h3>기능 종합 데모</h3>
-        <p>표·코드·라벨 칩·체크박스·이미지까지, 마크다운 요소를 한자리에 모은 샘플.</p>
-        <span class="open">열기 <svg viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg></span>
-      </a>
-
-      <a class="demo" href="./test/SKILL.html">
-        <span class="tag">명세</span>
-        <h3>SKILL.md, 책으로</h3>
-        <p>스킬의 정확한 동작 명세도 리더로. 긴 기술 문서가 어떻게 읽히는지 확인.</p>
+        <h3>README, 책으로</h3>
+        <p>프로젝트 소개 문서를 리더로 변환한 버전. 같은 기능을 또 한 번 손끝에서.</p>
         <span class="open">열기 <svg viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg></span>
       </a>
 
