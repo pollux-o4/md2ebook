@@ -225,7 +225,7 @@ body::before{ content:""; position:fixed; inset:0; z-index:-1; pointer-events:no
         </button>
       </div>
     </div>
-    <p class="hint-line"><code>npx skills</code> 를 쓰는 에이전트(Claude Code · Codex · Gemini CLI 등)면 어디든.<br>설치 후 <code>/md2ebook</code> 호출 · python 있으면 <code>python build.py 문서.md</code> 한 줄.</p>
+    <p class="hint-line"><code>npx skills</code> 를 쓰는 에이전트(Claude Code · Codex · Gemini CLI 등)면 어디든.<br>설치 후 <code>/md2ebook</code> 호출 · python 있으면 <code>python build.py 문서.md</code> 한 줄(repo 에서 바로 쓸 땐 <code>python skills/md2ebook/build.py 문서.md</code>).</p>
   </div>
 </section>
 
@@ -249,7 +249,7 @@ body::before{ content:""; position:fixed; inset:0; z-index:-1; pointer-events:no
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l2.3 4.7L19.5 8.5l-3.8 3.7.9 5.3L12 15l-4.6 2.5.9-5.3L4.5 8.5l5.2-.8z"/></svg>
           </div>
           <div class="ftitle">/md2ebook</div>
-          <div class="fdesc">에이전트 호출 · 또는 build.py 한 줄</div>
+          <div class="fdesc">에이전트 호출 · 또는 build.py 한 줄 (상세는 README)</div>
         </div>
         <div class="farrow" aria-hidden="true">
           <svg viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg>
@@ -270,15 +270,15 @@ body::before{ content:""; position:fixed; inset:0; z-index:-1; pointer-events:no
 <section class="section" id="features">
   <div class="wrap">
     <div class="section-head">
-      <h2>읽는 사람을 먼저 생각한 리더기</h2>
-      <p>기능 목록이 아니라, 더 잘 읽히고 더 잘 공유되는 경험.</p>
+      <h2>넘기고, 멈춘 자리 기억하고, 손끝에서 설정까지</h2>
+      <p>기능 목록이 아니라, 더 잘 읽히고 파일 하나로 더 잘 공유되는 책.</p>
     </div>
     <div class="cards">
 
       <div class="card">
         <div class="ic"><svg viewBox="0 0 24 24"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5z"/><path d="M4 5.5V20.5"/></svg></div>
         <h3>책처럼 넘겨 읽기</h3>
-        <p>H2마다 챕터로 나뉘고 화면을 넘으면 자동 분할. 3D 넘김·슬라이드·페이드·스크롤 중 취향대로.</p>
+        <p>H1·H2마다 챕터로 나뉘고 화면을 넘으면 자동 분할. 3D 넘김·슬라이드·페이드·스크롤 중 취향대로.</p>
       </div>
 
       <div class="card">
@@ -295,8 +295,8 @@ body::before{ content:""; position:fixed; inset:0; z-index:-1; pointer-events:no
 
       <div class="card">
         <div class="ic"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M9 9h6v6H9z"/></svg></div>
-        <h3>단어를 감싸면 색 라벨로</h3>
-        <p>백틱으로 감싼 <code style="font-family:var(--font-mono);font-size:.85em;background:var(--code-bg);padding:.05em .35em;border-radius:4px">`[단어]`</code> 가 색깔 칩으로 표시.</p>
+        <h3>단어를 감싸면 색칩으로</h3>
+        <p>백틱으로 감싼 <code style="font-family:var(--font-mono);font-size:.85em;background:var(--code-bg);padding:.05em .35em;border-radius:4px">`[단어]`</code> 가 색칩으로.</p>
         <div class="lbl-make">
           <div class="in">
             <span class="lead">마크다운</span>
@@ -338,14 +338,14 @@ body::before{ content:""; position:fixed; inset:0; z-index:-1; pointer-events:no
   <div class="wrap">
     <div class="section-head">
       <h2>말보다, 직접 넘겨보기</h2>
-      <p>문서 → 리더(reader) 변환 결과를 직접 넘겨보며 확인해보세요. </p>
+      <p>문서 → 리더(reader) 변환 결과를 직접 넘겨보며 확인.</p>
     </div>
     <div class="demos">
 
       <a class="demo" href="./demo/guide.html">
         <span class="tag">데모</span>
         <h3>md2ebook 사용 가이드</h3>
-        <p>설치부터 변환·읽기까지 한 편으로. 넘김·테마·목차·라벨 칩을 그대로 만져보는 실제 문서.</p>
+        <p>설치부터 변환·읽기까지 한 편으로. 넘김·테마·목차·색칩을 그대로 만져보는 실제 문서.</p>
         <span class="open">열기 <svg viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg></span>
       </a>
 

@@ -15,6 +15,7 @@ reader.html(템플릿) 안의 마크다운 블록만 입력 .md 내용으로 교
 단일 파일이다. src/ 를 고친 뒤 `python build.py --build-template` 로 재조립한다.
 최종 사용자는 이 단계가 필요 없다 — 조립본 reader.html 이 이미 커밋돼 있다.
 """
+import os
 import sys
 import re
 import base64
@@ -36,6 +37,8 @@ BLOCK = re.compile(
     r'(<script type="text/markdown" id="book-md">)(.*?)(</script>)',
     re.DOTALL,
 )
+# YAML frontmatter (--- ... ---) — 첫 줄부터 닫는 --- 까지. SKILL.md 같은 메타 보존용.
+FRONTMATTER = re.compile(r'^---\n(.*?\n)---\n+', re.DOTALL)
 # 링크 타깃 — ](url "제목") 형태
 LINK = re.compile(r'\]\(\s*([^)\s]+)(\s+"[^"]*")?\s*\)')
 # 이미지 — ![대체](src "제목"). src/title 보존하며 src 만 교체할 수 있게 그룹 분리.
@@ -47,7 +50,31 @@ IMG_MIME = {
 }
 # 인라인 크기 가드 — 이보다 큰 이미지는 단일 HTML 폭주를 막으려 인라인하지 않고
 # 파일 참조로 남긴 뒤 경고한다. 작게 넣고 싶으면 사전 최적화하거나 webp 로 넣으면 된다.
-IMG_INLINE_MAX = 1_500_000  # bytes (~1.5MB)
+# 큰 데모 자산을 의도적으로 인라인하려면 MD2EBOOK_MAX_INLINE_MB=4 처럼 한도를 올린다(옵트인).
+try:
+    IMG_INLINE_MAX = int(float(os.environ.get("MD2EBOOK_MAX_INLINE_MB", "1.5")) * 1_000_000)
+except ValueError:
+    IMG_INLINE_MAX = 1_500_000  # bytes (~1.5MB)
+
+
+def fold_frontmatter(md):
+    """YAML frontmatter 를 본문 위 인용블록으로 변환 — 키별로 단락 분리해 가독성 회복.
+    프런트매터가 없으면 그대로 반환(일반 .md 영향 없음)."""
+    m = FRONTMATTER.match(md)
+    if not m:
+        return md
+    pairs = []
+    for line in m.group(1).splitlines():
+        s = line.rstrip()
+        if not s.strip() or ":" not in s:
+            continue
+        k, v = s.split(":", 1)
+        pairs.append((k.strip(), v.strip()))
+    if not pairs:
+        return md[m.end():]
+    # `> **키** · 값` 단락 사이에 빈 인용줄(> )을 끼워 단락 분리.
+    block = "\n> \n".join(f"> **{k}** · {v}" for k, v in pairs)
+    return block + "\n\n" + md[m.end():]
 
 
 def rewrite_md_links(md, base_dir):
@@ -124,6 +151,7 @@ def main(argv):
 
     md = md_path.read_text(encoding="utf-8")
     base_dir = md_path.resolve().parent
+    md = fold_frontmatter(md)                   # YAML --- ... --- 을 인용블록으로 보존
     md = rewrite_md_links(md, base_dir)
     md = inline_images(md, base_dir)            # 로컬 이미지 → data-URI (단일 파일 유지)
     tpl = TEMPLATE.read_text(encoding="utf-8")

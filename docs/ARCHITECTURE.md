@@ -16,7 +16,7 @@ md2ebook 은 `.md` 한 편을 **외부 의존성 0 의 단일 오프라인 HTML 
 | 제약 | 귀결 |
 |---|---|
 | 사용 시점에 빌드 도구 없음 | 마크다운 파서를 라이브러리 대신 `app.js` 에 **손으로 짜 넣음** (`parseMarkdown`/`inline`) |
-| 네트워크 0 | 폰트는 system font stack 만, 이미지는 data-URI 또는 동봉 경로만 동작 (자동 인라인화 없음) |
+| 네트워크 0 | 폰트는 system font stack 만, 로컬 이미지는 `build.py` 가 base64 data-URI 로 **자동 인라인** (3장 Layer 2) — 산출물 HTML 한 장이 이미지까지 품어 자기완결 |
 | 단일 파일 | 콘텐츠가 `<script type="text/markdown">` 안에 인라인되고, 변환은 그 블록 **텍스트만** 치환 |
 | 토큰/수작업 0 | AI 가 HTML 을 생성하지 않음 — `build.py` 가 블록만 swap, 또는 사람이 블록만 복붙 |
 
@@ -49,20 +49,30 @@ md2ebook 은 `.md` 한 편을 **외부 의존성 0 의 단일 오프라인 HTML 
 
 ### Layer 2 — content swap (`main`, build.py:68-97)
 
-`python build.py <doc.md> [out.html]` 가 실제 변환이다:
+`python build.py <doc.md> [out.html]` 가 실제 변환이다 (`main`, build.py:115-146):
 
-1. `<doc.md>` 읽기 → `rewrite_md_links` 로 링크 재작성 (아래) — build.py:83-84
-2. `reader.html` 읽고 `BLOCK` 정규식으로 md 블록 탐색 (build.py:29-32, 85-88)
+1. `<doc.md>` 읽기 → `rewrite_md_links` 로 `.md` 링크 재작성 (아래) — build.py:132
+2. `inline_images` 로 로컬 이미지를 base64 data-URI 로 인라인 (아래) — build.py:133. **순서 고정: 링크 재작성 → 이미지 인라인.** 둘 다 RAW md 문자열에 정규식을 돌리고, 파서는 거치지 않는다.
+3. `reader.html` 읽고 `BLOCK` 정규식으로 md 블록 탐색 (build.py:36-39, 135)
    `BLOCK = (<script type="text/markdown" id="book-md">)(.*?)(</script>)`, `re.DOTALL`
-3. 본문 내 리터럴 `</script>` 를 `<\/script>` 로 이스케이프 (build.py:91) — 안 하면 블록이 조기 종료됨. 리더가 런타임에 원복한다 (app.js:168)
-4. `BLOCK.sub` 로 group2(내용)만 교체, group1/group3(태그)은 보존, `count=1` (build.py:92)
-5. 출력 경로 생략 시 `<doc>.html` (build.py:94)
+4. 본문 내 리터럴 `</script>` 를 `<\/script>` 로 이스케이프 (build.py:140) — 안 하면 블록이 조기 종료됨. 리더가 런타임에 원복한다 (app.js:168)
+5. `BLOCK.sub` 로 group2(내용)만 교체, group1/group3(태그)은 보존, `count=1` (build.py:141)
+6. 출력 경로 생략 시 `<doc>.html` (build.py:143)
 
 CSS/JS 는 손대지 않는다. 따라서 **라벨 색 커스터마이징·읽기 설정은 절대 HTML 에 구워지지 않는다** (런타임 localStorage 전용, 6·7장).
 
-### Link rewrite (`rewrite_md_links`, build.py:37-51)
+### Link rewrite (`rewrite_md_links`, build.py:58-72)
 
-`](url "title")` 형태(`LINK`, build.py:34)만 본다. `.md` 링크를 **같은 디렉토리에 동명 `.html` 파일이 실제로 존재할 때만** `.html` 로 바꾼다 (build.py:48). 외부 URL(`http/https//mailto:#`)·`.md` 아님·파일 없음은 그대로 둔다. `#fragment` 는 분리해 보존 (build.py:46,49). 자동 크롤링/변환 없음.
+`](url "title")` 형태(`LINK`, build.py:41)만 본다. `.md` 링크를 **같은 디렉토리에 동명 `.html` 파일이 실제로 존재할 때만** `.html` 로 바꾼다 (build.py:69). 외부 URL(`http/https//mailto:#`)·`.md` 아님·파일 없음은 그대로 둔다. `#fragment` 는 분리해 보존 (build.py:65,70). 자동 크롤링/변환 없음.
+
+### Image inlining (`inline_images`, build.py:75-98)
+
+`![alt](src "title")` 형태(`IMG`, build.py:43)의 **로컬 이미지 파일을 base64 data-URI 로 인라인**한다. 그래서 산출물 HTML 한 장이 이미지까지 품어 **자기완결**(single-file)을 지킨다 — 외부 자산 fetch 0 이라는 1순위 불변식과 직결된다.
+
+- 인라인 대상은 `IMG_MIME`(build.py:45-48)에 든 확장자뿐: `.png/.jpg/.jpeg/.gif/.webp/.svg/.bmp`. 그 외 확장자, 외부 URL(`http/https//`), 이미 `data:` URI, 없는 파일은 **그대로 둔다** (build.py:81-89).
+- **크기 가드 `IMG_INLINE_MAX`** (build.py:49-55): 환경변수 `MD2EBOOK_MAX_INLINE_MB`(기본 `1.5`, 즉 1_500_000 byte)로 한도를 잡는다. 한도 초과 파일은 인라인하지 않고 **파일 참조로 남긴 채 `warn:` 경고**를 찍는다 (build.py:91-95) — 거대한 자산 하나가 단일 HTML 을 수십 MB 로 부풀리는 것을 막는다. 큰 자산을 일부러 인라인하려면 `MD2EBOOK_MAX_INLINE_MB=4` 처럼 한도를 올려 옵트인한다.
+- `MD2EBOOK_MAX_INLINE_MB` 가 숫자로 안 읽히면 1.5MB 로 폴백(build.py:54-55).
+- `src` 의 `#frag`·`?query` 는 떼고 확장자/파일존재를 판정(build.py:83), 인라인 시 `title` 과 닫는 `)` 는 보존(`IMG` 그룹 분리, build.py:43,80,97).
 
 ### No-python path (manual)
 
@@ -71,7 +81,7 @@ python 이 없으면 (SKILL.md 의 "방법 B"):
 2. 복사본의 `<script type="text/markdown" id="book-md"> … </script>` **안쪽만** `.md` 원문으로 통째 교체 (바깥 CSS/JS 금지)
 3. 본문에 `</script>` 가 있으면 `<\/script>` 로 손수 치환
 
-결과물은 python 경로와 동일. (단 링크 재작성은 자동으로 안 됨 — 수동 경로의 알려진 차이)
+결과물은 python 경로와 거의 같지만 **`build.py` 의 전처리 두 가지를 둘 다 건너뛴다**: `.md→.html` 링크 재작성도, 로컬 이미지 base64 인라인도 자동으로 안 된다. 그래서 수동 경로로 만든 책은 로컬 이미지가 외부 파일 참조로 남아 자기완결이 깨질 수 있다. (GOTCHAS 의 수동 경로 항목 참조)
 
 ---
 
@@ -280,7 +290,7 @@ styles.css 에 `:root[data-theme="<name>"]{ --bg … }` 블록(24-59 형식) 추
 
 - 한 노드(예: 초거대 표/코드블록)가 한 페이지보다 크면 분할 불가 — 넘침.
 - 마크다운 파서는 CommonMark 비호환(setext 헤딩, 참조 링크, 느슨한 리스트 등 미지원).
-- no-python 수동 경로는 `.md→.html` 링크 재작성을 자동으로 못 함.
+- no-python 수동 경로는 `.md→.html` 링크 재작성과 로컬 이미지 base64 인라인을 **둘 다** 건너뜀 — 로컬 이미지가 외부 참조로 남아 자기완결이 깨질 수 있음.
 - `reader.html` 직접 편집 금지 — 항상 `src/` → `--build-template`.
 - 본문 리터럴 `</script>` 는 빌드 시 이스케이프(build.py:91)되고 런타임 원복(app.js:168)된다 — 둘 중 하나만 바꾸면 깨진다.
 

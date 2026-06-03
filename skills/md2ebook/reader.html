@@ -500,7 +500,8 @@ const NUL = String.fromCharCode(0);
 const PH = n => NUL + n + NUL;
 const RE_PH = new RegExp(NUL + '(\\d+)' + NUL, 'g');
 // 인라인 정규식 호이스팅(모듈 스코프) — 매 호출 재컴파일 회피.
-const RE_CODE = /`([^`]+)`/g;
+// CommonMark 코드 스팬 — 여는 백틱 N개 ~ 닫는 백틱 N개. double-backtick(``)도 처리.
+const RE_CODE = /(`+)((?:(?!\1)[\s\S])+?)\1/g;
 const RE_LABEL = /^\[(.+)\]$/;
 const RE_IMG = /!\[([^\]]*)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)/g;
 const RE_BOLD = /\*\*([^*]+)\*\*/g;
@@ -515,10 +516,13 @@ function renderLabel(key, raw){ if (LABELS[key]) return '<span class="lbl '+LABE
 function inline(text){
   // 코드 먼저 추출(내부는 이스케이프, 인라인 처리 안 함) → 자리표시자
   const codes = [];
-  text = text.replace(RE_CODE, (m, c) => {
-    const t = c.trim();
+  text = text.replace(RE_CODE, (m, ticks, c) => {
+    // CommonMark: 양쪽 공백 1개씩 트림(내용이 공백뿐이 아닐 때) — ``  `x`  `` → ` `x` `
+    let body = c;
+    if (body.length >= 2 && body.charCodeAt(0) === 32 && body.charCodeAt(body.length-1) === 32 && body.trim() !== '') body = body.slice(1, -1);
+    const t = body.trim();
     const lm = RE_LABEL.exec(t);              // [사실] 같은 라벨에서 대괄호 제거
-    const html = lm ? renderLabel(lm[1], t) : '<code>'+esc(c)+'</code>';
+    const html = lm ? renderLabel(lm[1], t) : '<code>'+esc(body)+'</code>';
     codes.push(html); return PH(codes.length-1);
   });
   // 이미지 ![대체텍스트](src "제목") — src 보존 위해 esc 전에 자리표시자로 추출.
