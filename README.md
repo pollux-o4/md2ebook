@@ -5,11 +5,11 @@
 쓰던 `.md` 를 외부 의존성 0의 **오프라인 단일 HTML 책 리더(reader)**로 바꿔 주는 [Agent Skill](https://github.com/vercel-labs/skills).
 CDN도 번들러도 런타임도 없이 **파일 하나** — 폰에서도 바로. 내용과 디자인이 분리돼, 글만 갈아끼우면 그대로 책.
 
-**▶ 처음이라면 [3분 소개 페이지](./intro.html)부터 — 무엇을 만드는지 한눈에.**
+**▶ 처음이라면 [3분 소개 페이지](https://pollux-o4.github.io/md2ebook/intro.html)부터 — 무엇을 만드는지 한눈에.**
 
 ![md2ebook 리더 데모 — 페이지 넘김·테마·목차가 한 파일 안에서](assets/demo.gif)
 
-> 소개: [`intro.html`](./intro.html) · 사용 가이드: [`demo/guide.html`](./demo/guide.html) · 라이브로 넘겨보기: [`README.html`](./README.html)
+> 소개: [`intro.html`](https://pollux-o4.github.io/md2ebook/intro.html) · 사용 가이드: [`demo/guide.html`](https://pollux-o4.github.io/md2ebook/demo/guide.html) · 라이브로 넘겨보기: [`README.html`](https://pollux-o4.github.io/md2ebook/README.html)
 
 ## 설치
 
