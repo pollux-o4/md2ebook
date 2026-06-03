@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>md2ebook — 마크다운을 한 장의 책으로</title>
+<meta name="description" content="마크다운 한 편을 외부 의존성 0의 오프라인 단일 HTML 책 리더(reader)로 바꾸는 Agent Skill. CDN·번들러·런타임 없이 파일 하나, 폰에서도 바로." />
+<style>
+/* =========================================================================
+   md2ebook 소개 랜딩 — reader 의 paper 테마를 재사용한 단일 자기완결 HTML.
+   외부 의존성 0: 시스템 폰트 스택, 인라인 CSS/SVG 만.
+   ========================================================================= */
+:root{
+  --font-sans: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Pretendard", "Noto Sans KR", "Malgun Gothic", system-ui, sans-serif;
+  --font-serif: Georgia, "Times New Roman", "Noto Serif KR", "AppleMyungjo", "Batang", serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "D2Coding", monospace;
+
+  /* paper 테마 토큰 (reader 와 동일) */
+  --bg:#e7e0d2; --page:#faf6ec; --ink:#2c2823; --ink-soft:#6a6357;
+  --rule:#e3dccd; --chrome:#f4efe4; --chrome-rule:#ddd5c4;
+  --accent:#9c6b3f; --accent-deep:#7d5530; --code-bg:#efe8d8;
+  --quote-rule:#cdbf9f; --page-edge:rgba(120,100,70,.18);
+
+  --chip-fact:#2f7d55;   --chip-fact-bg:rgba(47,125,85,.12);
+  --chip-guess:#9a6b15;  --chip-guess-bg:rgba(154,107,21,.13);
+  --chip-op:#2563a8;     --chip-op-bg:rgba(37,99,168,.12);
+  --chip-none:#777;      --chip-none-bg:rgba(120,120,120,.13);
+
+  --maxw:980px;
+}
+*{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+html{ scroll-behavior:smooth; }
+body{ margin:0; background:var(--bg); color:var(--ink); font-family:var(--font-sans);
+  line-height:1.7; -webkit-font-smoothing:antialiased; word-break:keep-all; overflow-wrap:break-word; }
+a{ color:var(--accent-deep); }
+.wrap{ max-width:var(--maxw); margin:0 auto; padding:0 clamp(20px,5vw,40px); }
+
+/* 부드러운 종이 결 느낌의 전체 배경 그라데이션 */
+body::before{ content:""; position:fixed; inset:0; z-index:-1; pointer-events:none;
+  background:radial-gradient(120% 80% at 50% -10%, rgba(250,246,236,.9) 0%, rgba(231,224,210,0) 60%); }
+
+/* ============================ 상단 바 ============================ */
+.nav{ position:sticky; top:0; z-index:20; background:color-mix(in srgb, var(--chrome) 88%, transparent);
+  backdrop-filter:saturate(120%) blur(8px); border-bottom:1px solid var(--chrome-rule); }
+.nav .wrap{ display:flex; align-items:center; justify-content:space-between; height:58px; }
+.brand{ display:flex; align-items:center; gap:10px; font-weight:700; font-size:16px; letter-spacing:-.01em; color:var(--ink); text-decoration:none; }
+.brand .mark{ width:26px; height:26px; flex:0 0 auto; }
+.nav-links{ display:flex; align-items:center; gap:6px; }
+.nav-links a{ color:var(--ink-soft); text-decoration:none; font-size:14px; padding:7px 11px; border-radius:8px; }
+.nav-links a:hover{ background:color-mix(in srgb, var(--ink) 7%, transparent); color:var(--ink); }
+.nav-links a.ghaccent{ color:var(--accent-deep); font-weight:600; }
+
+/* ============================ 히어로 ============================ */
+.hero{ padding:clamp(56px,9vw,108px) 0 clamp(40px,6vw,64px); text-align:center; }
+.eyebrow{ display:inline-block; font-size:12.5px; font-weight:600; letter-spacing:.06em;
+  text-transform:uppercase; color:var(--accent-deep);
+  background:color-mix(in srgb, var(--accent) 13%, transparent);
+  padding:5px 12px; border-radius:999px; margin-bottom:22px; }
+.hero h1{ font-size:clamp(34px,6.2vw,60px); line-height:1.12; letter-spacing:-.025em;
+  font-weight:700; margin:0 0 .42em; }
+.hero h1 .em{ color:var(--accent-deep); }
+.hero .sub{ font-size:clamp(16px,2.4vw,20px); color:var(--ink-soft);
+  margin:0 auto; line-height:1.65; }
+/* 첫 문장은 데스크탑에서 한 줄(고아 줄바꿈 방지), 좁은 화면에선 자연 줄바꿈 */
+.hero .sub-lead{ white-space:nowrap; }
+@media (max-width:520px){ .hero .sub-lead{ white-space:normal; } }
+/* 보조문구 둘째 줄 — 살짝 띄우고 톤다운해 구분감 */
+.hero .sub-note{ display:block; margin-top:10px; font-size:.9em; opacity:.72; }
+
+.cta-row{ display:flex; flex-wrap:wrap; gap:14px; justify-content:center; align-items:center; margin-top:34px; }
+
+/* 설치 명령 복사 박스 (주 CTA) */
+.install{ display:flex; align-items:stretch; background:var(--page); border:1px solid var(--page-edge);
+  border-radius:12px; box-shadow:0 10px 30px -16px rgba(80,60,30,.5); overflow:hidden;
+  font-family:var(--font-mono); max-width:100%; }
+.install .cmd{ display:flex; align-items:center; gap:10px; padding:0 16px; font-size:clamp(13px,2.2vw,15.5px);
+  white-space:nowrap; overflow-x:auto; color:var(--ink); }
+.install .cmd .dollar{ color:var(--accent); user-select:none; }
+.install .copy{ appearance:none; border:0; border-left:1px solid var(--page-edge); cursor:pointer;
+  background:color-mix(in srgb, var(--accent) 14%, var(--page)); color:var(--accent-deep);
+  font:inherit; font-family:var(--font-sans); font-weight:600; font-size:13.5px; padding:13px 18px;
+  display:inline-flex; align-items:center; gap:7px; transition:background .15s ease; flex:0 0 auto; }
+.install .copy:hover{ background:color-mix(in srgb, var(--accent) 24%, var(--page)); }
+.install .copy svg{ width:15px; height:15px; stroke:currentColor; fill:none; stroke-width:1.8;
+  stroke-linecap:round; stroke-linejoin:round; }
+.install .copy.done{ color:var(--chip-fact); background:var(--chip-fact-bg); }
+
+.hint-line{ margin-top:14px; font-size:13.5px; color:var(--ink-soft); }
+.hint-line code{ font-family:var(--font-mono); font-size:.92em; background:var(--code-bg);
+  padding:.1em .45em; border-radius:5px; }
+
+/* ============================ 변환 도식 (.md → 책) ============================ */
+.flow{ padding:clamp(36px,5vw,56px) 0; }
+.flow-card{ background:var(--page); border:1px solid var(--page-edge); border-radius:16px;
+  box-shadow:0 14px 44px -26px rgba(80,60,30,.55); padding:clamp(26px,4vw,46px); }
+.flow-grid{ display:grid; grid-template-columns:1fr auto 1fr auto 1fr; align-items:center; gap:clamp(8px,2vw,22px); }
+.fnode{ text-align:center; }
+.fnode .ftitle{ font-weight:600; font-size:15px; margin-top:12px; }
+.fnode .fdesc{ font-size:13px; color:var(--ink-soft); margin-top:3px; line-height:1.5; }
+.farrow{ color:var(--accent); display:flex; align-items:center; justify-content:center; }
+.farrow svg{ width:30px; height:30px; stroke:currentColor; fill:none; stroke-width:1.6;
+  stroke-linecap:round; stroke-linejoin:round; }
+
+/* SVG 미니 일러스트 공통 박스 */
+.glyph{ width:74px; height:74px; margin:0 auto; border-radius:14px; display:flex;
+  align-items:center; justify-content:center; }
+.glyph.md{ background:var(--code-bg); }
+.glyph.skill{ background:color-mix(in srgb, var(--accent) 15%, var(--page)); }
+.glyph.book{ background:color-mix(in srgb, var(--accent) 22%, var(--page)); }
+.glyph svg{ width:40px; height:40px; stroke:var(--accent-deep); fill:none; stroke-width:1.5;
+  stroke-linecap:round; stroke-linejoin:round; }
+
+/* ============================ 섹션 공통 ============================ */
+.section{ padding:clamp(40px,6vw,72px) 0; }
+.section-head{ text-align:center; max-width:54ch; margin:0 auto clamp(28px,4vw,44px); }
+.section-head h2{ font-size:clamp(24px,3.6vw,34px); line-height:1.2; letter-spacing:-.02em;
+  font-weight:700; margin:0 0 .4em; }
+.section-head p{ font-size:clamp(15px,2vw,17px); color:var(--ink-soft); margin:0; }
+
+/* 핵심 기능 — 혜택 카드 */
+.cards{ display:grid; grid-template-columns:repeat(auto-fit, minmax(240px,1fr)); gap:18px; }
+.card{ background:var(--page); border:1px solid var(--page-edge); border-radius:14px;
+  padding:26px 24px; box-shadow:0 10px 30px -22px rgba(80,60,30,.5); }
+.card .ic{ width:42px; height:42px; border-radius:11px; display:flex; align-items:center;
+  justify-content:center; background:color-mix(in srgb, var(--accent) 13%, var(--page)); margin-bottom:16px; }
+.card .ic svg{ width:23px; height:23px; stroke:var(--accent-deep); fill:none; stroke-width:1.6;
+  stroke-linecap:round; stroke-linejoin:round; }
+.card h3{ font-size:17px; font-weight:600; margin:0 0 7px; letter-spacing:-.01em; }
+.card p{ font-size:14.5px; color:var(--ink-soft); margin:0; line-height:1.6; }
+
+/* 라벨 칩 미니 데모 */
+.lbl{ font-family:var(--font-sans); font-size:.8em; font-weight:600; padding:.18em .55em;
+  border-radius:5px; white-space:nowrap; }
+.lbl.fact{ color:var(--chip-fact); background:var(--chip-fact-bg); }
+.lbl.guess{ color:var(--chip-guess); background:var(--chip-guess-bg); }
+.lbl.op{ color:var(--chip-op); background:var(--chip-op-bg); }
+.lbl.none{ color:var(--chip-none); background:var(--chip-none-bg); }
+/* 예약어 외 라벨: 단어 해시로 정해진 hue(--h) 자동 배정 — reader 와 동일 색식 */
+.lbl.auto{ color:hsl(var(--h) 48% 34%); background:hsl(var(--h) 45% 46% / .14); }
+.chip-demo{ display:flex; flex-wrap:wrap; gap:7px; margin-top:13px; }
+
+/* 만드는 법 시각화: 마크다운 입력(모노) → 색칩 결과 */
+.lbl-make{ margin-top:14px; display:grid; grid-template-columns:1fr auto 1fr; align-items:center;
+  gap:10px; }
+.lbl-make .in,
+.lbl-make .out{ background:var(--code-bg); border:1px solid var(--page-edge); border-radius:9px;
+  padding:11px 12px; min-height:46px; display:flex; flex-wrap:wrap; align-items:center; gap:7px; }
+.lbl-make .in{ font-family:var(--font-mono); font-size:13px; color:var(--ink); line-height:1.5; }
+.lbl-make .out{ background:var(--page); }
+.lbl-make .lead{ font-size:11px; font-weight:600; letter-spacing:.04em; text-transform:uppercase;
+  color:var(--ink-soft); margin-bottom:6px; display:block; }
+.lbl-make .mk-arrow{ color:var(--accent); display:flex; align-items:center; justify-content:center; }
+.lbl-make .mk-arrow svg{ width:22px; height:22px; stroke:currentColor; fill:none; stroke-width:1.7;
+  stroke-linecap:round; stroke-linejoin:round; }
+@media (max-width:480px){
+  .lbl-make{ grid-template-columns:1fr; gap:6px; }
+  .lbl-make .mk-arrow{ transform:rotate(90deg); }
+}
+
+/* ============================ 라이브 데모 ============================ */
+.demos{ display:grid; grid-template-columns:repeat(auto-fit, minmax(250px,1fr)); gap:18px; }
+.demo{ display:block; text-decoration:none; color:inherit; background:var(--page);
+  border:1px solid var(--page-edge); border-radius:14px; padding:24px;
+  box-shadow:0 10px 30px -22px rgba(80,60,30,.5); transition:transform .15s ease, box-shadow .15s ease; }
+.demo:hover{ transform:translateY(-3px); box-shadow:0 18px 38px -22px rgba(80,60,30,.6); }
+.demo .tag{ font-size:12px; font-weight:600; color:var(--accent-deep); letter-spacing:.03em; text-transform:uppercase; }
+.demo h3{ font-size:18px; margin:9px 0 6px; font-weight:600; }
+.demo p{ font-size:14px; color:var(--ink-soft); margin:0; }
+.demo .open{ margin-top:16px; font-size:13.5px; font-weight:600; color:var(--accent-deep);
+  display:inline-flex; align-items:center; gap:6px; }
+.demo .open svg{ width:15px; height:15px; stroke:currentColor; fill:none; stroke-width:1.8;
+  stroke-linecap:round; stroke-linejoin:round; }
+
+/* ============================ 푸터 ============================ */
+.footer{ border-top:1px solid var(--chrome-rule); margin-top:clamp(30px,5vw,60px);
+  padding:38px 0 48px; text-align:center; color:var(--ink-soft); font-size:14px; }
+.footer a{ color:var(--accent-deep); text-decoration:none; font-weight:600; }
+.footer a:hover{ text-decoration:underline; }
+.footer .repo{ display:inline-flex; align-items:center; gap:8px; margin-top:6px; }
+.footer .repo svg{ width:17px; height:17px; fill:currentColor; }
+
+@media (max-width:680px){
+  .flow-grid{ grid-template-columns:1fr; gap:6px; }
+  .farrow{ transform:rotate(90deg); padding:4px 0; }
+  .nav-links a:not(.ghaccent){ display:none; }
+}
+</style>
+</head>
+<body>
+
+<!-- 상단 바 -->
+<header class="nav">
+  <div class="wrap">
+    <a class="brand" href="#top">
+      <svg class="mark" viewBox="0 0 24 24" fill="none" stroke="#9c6b3f" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5z"/>
+        <path d="M4 5.5V20.5"/><path d="M8 8h8M8 11.5h6"/>
+      </svg>
+      md2ebook
+    </a>
+    <nav class="nav-links">
+      <a href="#how">동작 방식</a>
+      <a href="#features">기능</a>
+      <a href="#live">라이브로 보기</a>
+      <a class="ghaccent" href="https://github.com/pollux-o4/md2ebook" target="_blank" rel="noopener">GitHub ↗</a>
+    </nav>
+  </div>
+</header>
+
+<a id="top"></a>
+
+<!-- 히어로 -->
+<section class="hero">
+  <div class="wrap">
+    <span class="eyebrow">오프라인 · 단일 HTML · 의존성 0</span>
+    <h1>마크다운 한 편,<br><span class="em">한 장의 책</span>.</h1>
+    <p class="sub"><span class="sub-lead">쓰던 <code style="font-family:var(--font-mono);font-size:.9em;background:var(--code-bg);padding:.1em .4em;border-radius:5px">.md</code> 한 편이 페이지 넘기는 책 리더(reader) HTML 으로.</span><span class="sub-note">CDN도 번들러도 런타임도 없이 <strong>파일 하나</strong>, 폰에서도 바로.</span></p>
+
+    <div class="cta-row">
+      <div class="install" id="install">
+        <span class="cmd"><span class="dollar">$</span><span id="cmd-text">npx skills add pollux-o4/md2ebook</span></span>
+        <button class="copy" id="copyBtn" type="button" aria-label="설치 명령 복사">
+          <svg id="copyIcon" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h8"/></svg>
+          <span id="copyLabel">복사</span>
+        </button>
+      </div>
+    </div>
+    <p class="hint-line"><code>npx skills</code> 를 쓰는 에이전트(Claude Code · Codex · Gemini CLI 등)면 어디든.<br>설치 후 <code>/md2ebook</code> 호출 · python 있으면 <code>python build.py 문서.md</code> 한 줄(repo 에서 바로 쓸 땐 <code>python skills/md2ebook/build.py 문서.md</code>).</p>
+  </div>
+</section>
+
+<!-- 변환 도식 -->
+<section class="flow" id="how">
+  <div class="wrap">
+    <div class="flow-card">
+      <div class="flow-grid">
+        <div class="fnode">
+          <div class="glyph md">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z"/><path d="M7 15V9l2.2 2.6L11.4 9v6"/><path d="M15 9v6M15 15l1.8-2M15 15l-1.8-2"/></svg>
+          </div>
+          <div class="ftitle">.md 한 편</div>
+          <div class="fdesc">평소 쓰던 마크다운 그대로</div>
+        </div>
+        <div class="farrow" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg>
+        </div>
+        <div class="fnode">
+          <div class="glyph skill">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l2.3 4.7L19.5 8.5l-3.8 3.7.9 5.3L12 15l-4.6 2.5.9-5.3L4.5 8.5l5.2-.8z"/></svg>
+          </div>
+          <div class="ftitle">/md2ebook</div>
+          <div class="fdesc">에이전트 호출 · 또는 build.py 한 줄 (상세는 README)</div>
+        </div>
+        <div class="farrow" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg>
+        </div>
+        <div class="fnode">
+          <div class="glyph book">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5z"/><path d="M4 5.5V20.5"/><path d="M20 18v3H6.5A2.5 2.5 0 0 1 4 18.5"/></svg>
+          </div>
+          <div class="ftitle">단일 HTML 책</div>
+          <div class="fdesc">열면 끝 · 공유·오프라인 보관</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 핵심 기능 (혜택 중심) -->
+<section class="section" id="features">
+  <div class="wrap">
+    <div class="section-head">
+      <h2>넘기고, 멈춘 자리 기억하고, 손끝에서 설정까지</h2>
+      <p>기능 목록이 아니라, 더 잘 읽히고 파일 하나로 더 잘 공유되는 책.</p>
+    </div>
+    <div class="cards">
+
+      <div class="card">
+        <div class="ic"><svg viewBox="0 0 24 24"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5z"/><path d="M4 5.5V20.5"/></svg></div>
+        <h3>책처럼 넘겨 읽기</h3>
+        <p>H1·H2마다 챕터로 나뉘고 화면을 넘으면 자동 분할. 3D 넘김·슬라이드·페이드·스크롤 중 취향대로.</p>
+      </div>
+
+      <div class="card">
+        <div class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/></svg></div>
+        <h3>눈이 편한 4가지 테마</h3>
+        <p>paper · sepia · gray · black. 글자 크기·줄간격·고딕/명조까지 손끝에서, 그 설정 그대로 기억.</p>
+      </div>
+
+      <div class="card">
+        <div class="ic"><svg viewBox="0 0 24 24"><path d="M21 12.8V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h6.2"/><path d="M16 3h5v5M21 3l-9 9"/></svg></div>
+        <h3>어디서 멈췄는지 기억</h3>
+        <p>읽던 위치·설정·체크박스 상태를 localStorage에 저장. 닫았다 열어도 그 자리에서.</p>
+      </div>
+
+      <div class="card">
+        <div class="ic"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M9 9h6v6H9z"/></svg></div>
+        <h3>단어를 감싸면 색칩으로</h3>
+        <p>백틱으로 감싼 <code style="font-family:var(--font-mono);font-size:.85em;background:var(--code-bg);padding:.05em .35em;border-radius:4px">`[단어]`</code> 가 색칩으로.</p>
+        <div class="lbl-make">
+          <div class="in">
+            <span class="lead">마크다운</span>
+            `[중요]` `[TODO]` `[디자인]` `[사실]`
+          </div>
+          <div class="mk-arrow" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg>
+          </div>
+          <div class="out">
+            <span class="lead">리더</span>
+            <span class="chip-demo" style="margin-top:0">
+              <span class="lbl auto" style="--h:8">[중요]</span>
+              <span class="lbl auto" style="--h:265">[TODO]</span>
+              <span class="lbl auto" style="--h:200">[디자인]</span>
+              <span class="lbl fact">[사실]</span>
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="ic"><svg viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h12"/></svg></div>
+        <h3>긴 글도 길 잃지 않게</h3>
+        <p>목차 드로어가 현재 위치를 짚어주고, 진행바와 몰입모드로 읽기에만 집중.</p>
+      </div>
+
+      <div class="card">
+        <div class="ic"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h8"/></svg></div>
+        <h3>죽지 않은 본문</h3>
+        <p>데스크탑 선택·복사, 모바일 스와이프 넘김. 코드블록 복사 버튼, 이미지 탭 확대까지.</p>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- 라이브로 보기 -->
+<section class="section" id="live">
+  <div class="wrap">
+    <div class="section-head">
+      <h2>말보다, 직접 넘겨보기</h2>
+      <p>문서 → 리더(reader) 변환 결과를 직접 넘겨보며 확인.</p>
+    </div>
+    <div class="demos">
+
+      <a class="demo" href="./demo/guide.html">
+        <span class="tag">데모</span>
+        <h3>md2ebook 사용 가이드</h3>
+        <p>설치부터 변환·읽기까지 한 편으로. 넘김·테마·목차·색칩을 그대로 만져보는 실제 문서.</p>
+        <span class="open">열기 <svg viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg></span>
+      </a>
+
+      <a class="demo" href="./README.html">
+        <span class="tag">쇼케이스</span>
+        <h3>README, 책으로</h3>
+        <p>프로젝트 소개 문서를 리더로 변환한 버전. 같은 기능을 또 한 번 손끝에서.</p>
+        <span class="open">열기 <svg viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg></span>
+      </a>
+
+    </div>
+  </div>
+</section>
+
+<!-- 푸터 -->
+<footer class="footer">
+  <div class="wrap">
+    <div>마크다운으로 쓰고, 책처럼 나눠 읽기.</div>
+    <a class="repo" href="https://github.com/pollux-o4/md2ebook" target="_blank" rel="noopener">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
+      github.com/pollux-o4/md2ebook
+    </a>
+  </div>
+</footer>
+
+<script>
+(function(){
+  var btn = document.getElementById('copyBtn');
+  var label = document.getElementById('copyLabel');
+  var icon = document.getElementById('copyIcon');
+  var cmd = document.getElementById('cmd-text').textContent;
+  var checkMark = '<path d="M5 13l4 4L19 7"/>';
+  var copyMark = '<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h8"/>';
+  var resetT;
+
+  function flashDone(){
+    btn.classList.add('done');
+    label.textContent = '복사됨';
+    icon.innerHTML = checkMark;
+    clearTimeout(resetT);
+    resetT = setTimeout(function(){
+      btn.classList.remove('done');
+      label.textContent = '복사';
+      icon.innerHTML = copyMark;
+    }, 1800);
+  }
+
+  function legacyCopy(text){
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.focus(); ta.select();
+    var ok = false;
+    try { ok = document.execCommand('copy'); } catch(e){ ok = false; }
+    document.body.removeChild(ta);
+    return ok;
+  }
+
+  btn.addEventListener('click', function(){
+    // file:// 등에서 clipboard API 가 막히면 execCommand 폴백
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(cmd).then(flashDone, function(){
+        if (legacyCopy(cmd)) flashDone();
+      });
+    } else {
+      if (legacyCopy(cmd)) flashDone();
+    }
+  });
+})();
+</script>
+</body>
+</html>
