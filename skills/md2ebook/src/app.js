@@ -55,7 +55,11 @@ function inline(text){
     codes.push('<img src="'+src+'" alt="'+attr(alt)+'"'+tt+'>');
     return PH(codes.length-1);
   });
+  // raw 인라인 SVG 보존 — esc 전에 통째로 빼두고 마지막에 되꽂는다(표준 마크다운 동작).
+  text = text.replace(/<svg[\s\S]*?<\/svg>/gi, (m) => { codes.push(m); return PH(codes.length-1); });
   text = esc(text);
+  // 줄바꿈용 raw <br> 만 복원(GFM 표준) — 그 외 태그는 이스케이프 유지(XSS 방지)
+  text = text.replace(/&lt;br\s*\/?&gt;/gi, '<br>');
   text = text.replace(RE_BOLD, '<strong>$1</strong>');
   text = text.replace(RE_ITAL, '$1<em>$2</em>');
   text = text.replace(RE_DEL, '<del>$1</del>');
@@ -154,6 +158,12 @@ function parseMarkdown(md){
         i++;
       }
       html += renderList(items); continue;
+    }
+    // raw <svg> 블록(여러 줄) — 통째로 통과(이스케이프 안 함). 표준 마크다운 동작과 일치.
+    if (/^\s*<svg[\s>]/i.test(line)){
+      let buf = [];
+      while (i < lines.length){ buf.push(lines[i]); const end = /<\/svg>/i.test(lines[i]); i++; if (end) break; }
+      html += buf.join('\n'); continue;
     }
     // 빈 줄
     if (/^\s*$/.test(line)){ i++; continue; }
