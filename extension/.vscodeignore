@@ -1,0 +1,12 @@
+.vscode/**
+.gitignore
+test.md
+test_orig.html
+test_render.html
+test_render.png
+verify_render.js
+make_test.js
+CONTEXT.md
+**/*.vsix
+**/.playwright-mcp/**
+_*.html

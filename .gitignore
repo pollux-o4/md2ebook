@@ -1,2 +1,9 @@
 
 .claude/
+
+# VSCode 확장 (extension/) — 빌드 산출물·의존성·임시 렌더 결과
+extension/node_modules/
+extension/*.vsix
+extension/test_render.html
+extension/test_render.png
+extension/test_orig.html
