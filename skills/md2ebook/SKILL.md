@@ -1,5 +1,6 @@
 ---
 name: md2ebook
+disable-model-invocation: true
 description: Converts a Markdown document into a self-contained, offline book-reader HTML page — paginated like an e-book with page-flip/slide/fade/scroll modes, 4 themes (paper/sepia/gray/black), a table of contents, font/size/spacing controls, and 사실/추정/의견/모름 evidence-label chips. Use when the user wants to read or present a .md file as a book/e-book, turn Markdown into a shareable offline reading page, or asks for a 책 리더 / md 이북 / 마크다운 뷰어 / 문서를 책처럼. Conversion runs via build.py with no manual HTML editing.
 ---
 

@@ -26,7 +26,7 @@ try:
 except Exception:
     pass
 
-HERE = pathlib.Path(__file__).resolve().parent
+HERE = pathlib.Path(__file__).absolute().parent
 TEMPLATE = HERE / "reader.html"
 SRC = HERE / "src"
 # template.html 안의 주입 마커 — 조립 시 모듈 내용으로 치환.
@@ -150,7 +150,7 @@ def main(argv):
         return 1
 
     md = md_path.read_text(encoding="utf-8")
-    base_dir = md_path.resolve().parent
+    base_dir = md_path.absolute().parent
     md = fold_frontmatter(md)                   # YAML --- ... --- 을 인용블록으로 보존
     md = rewrite_md_links(md, base_dir)
     md = inline_images(md, base_dir)            # 로컬 이미지 → data-URI (단일 파일 유지)
