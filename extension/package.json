@@ -1,0 +1,39 @@
+{
+  "name": "markdown-ebook-reader",
+  "displayName": "Markdown eBook Reader",
+  "description": "Read your Markdown files like a premium eBook directly inside VS Code.",
+  "version": "1.0.0",
+  "publisher": "antigravity",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/pollux-o4/md2ebook.git"
+  },
+  "engines": {
+    "vscode": "^1.74.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [],
+  "main": "./extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "markdown-ebook-reader.open",
+        "title": "Ebook Reader: Open Preview"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "markdown-ebook-reader.open",
+          "when": "resourceLangId == markdown",
+          "group": "navigation"
+        }
+      ]
+    }
+  },
+  "devDependencies": {
+    "playwright-core": "^1.60.0"
+  }
+}
