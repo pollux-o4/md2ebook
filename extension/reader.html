@@ -742,11 +742,11 @@ const animLayer = $('#animLayer'), animShade = $('#animShade');
 const stage = $('#stage');
 let animating = false;
 
-function setHtml(pad, idx){ pad.innerHTML = (pages[idx] && pages[idx].html) || ''; pad.scrollTop = 0; applyTasks(pad); }
+function setHtml(pad, idx){ pad.innerHTML = (pages[idx] && pages[idx].html) || ''; pad.scrollTop = 0; applyTasks(pad); if (typeof initMermaidPanZoom === 'function') initMermaidPanZoom(pad); }
 
 function renderBase(){
   // scroll 은 srcNodes(렌더된 mermaid 포함)에서 직접 — 캐시 문자열은 mermaid 렌더 전 상태라 안 씀
-  if (settings.flip === 'scroll'){ padBelow.innerHTML = srcNodes.map(n=>n.outerHTML).join(''); applyTasks(padBelow); observeScrollHeadings(); }
+  if (settings.flip === 'scroll'){ padBelow.innerHTML = srcNodes.map(n=>n.outerHTML).join(''); applyTasks(padBelow); if (typeof initMermaidPanZoom === 'function') initMermaidPanZoom(padBelow); observeScrollHeadings(); }
   else { setHtml(padBelow, current); disconnectScrollObserver(); }
 }
 
@@ -1175,6 +1175,175 @@ $('#btnSettings').addEventListener('click', ()=>openSheet($('#setSheet')));
 $('#tocClose').addEventListener('click', closeSheets);
 $('#setClose').addEventListener('click', closeSheets);
 scrim.addEventListener('click', closeSheets);
+
+/* =========================================================================
+   7.4) mermaid SVG 드래그(Pan) 및 휠 확대/축소(Zoom) 기능
+   ========================================================================= */
+function initMermaidPanZoom(container) {
+  container.querySelectorAll('.mermaid').forEach(el => {
+    const svg = el.querySelector('svg');
+    if (!svg || el.getAttribute('data-panzoom-initialized')) return;
+    el.setAttribute('data-panzoom-initialized', 'true');
+    
+    el.style.position = 'relative';
+    el.style.overflow = 'hidden';
+    el.style.cursor = 'grab';
+    el.style.userSelect = 'none';
+    svg.style.transformOrigin = '0 0';
+    svg.style.transition = 'none';
+    
+    let isDragging = false;
+    let startX = 0, startY = 0;
+    let translateX = 0, translateY = 0;
+    let scale = 1;
+    
+    const updateTransform = () => {
+      svg.style.transform = `translate(${translateX}px, ${translateY}px) scale(${scale})`;
+    };
+    
+    // UI 컨트롤 버튼 패널 추가
+    const controls = document.createElement('div');
+    controls.className = 'mermaid-controls';
+    controls.style.cssText = 'position:absolute;bottom:10px;right:10px;display:flex;gap:6px;z-index:10;pointer-events:auto;';
+    
+    const btnStyle = 'width:28px;height:28px;border:1px solid var(--chrome-rule,#ddd);background:var(--page,#faf6ec);color:var(--ink,#333);font-size:15px;font-weight:bold;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,0.1);user-select:none;transition:background 0.15s, opacity 0.15s;opacity:0.85;';
+    
+    const zoomInBtn = document.createElement('button');
+    zoomInBtn.innerHTML = '＋';
+    zoomInBtn.style.cssText = btnStyle;
+    zoomInBtn.title = '확대';
+    
+    const zoomOutBtn = document.createElement('button');
+    zoomOutBtn.innerHTML = '－';
+    zoomOutBtn.style.cssText = btnStyle;
+    zoomOutBtn.title = '축소';
+    
+    const resetBtn = document.createElement('button');
+    resetBtn.innerHTML = '⟲';
+    resetBtn.style.cssText = btnStyle;
+    resetBtn.title = '초기화';
+    
+    // 버튼 마우스 오버 효과
+    [zoomInBtn, zoomOutBtn, resetBtn].forEach(btn => {
+      btn.addEventListener('mouseenter', () => { btn.style.background = 'var(--chrome-rule, #efe8d8)'; btn.style.opacity = '1'; });
+      btn.addEventListener('mouseleave', () => { btn.style.background = 'var(--page, #faf6ec)'; btn.style.opacity = '0.85'; });
+    });
+    
+    controls.appendChild(zoomInBtn);
+    controls.appendChild(zoomOutBtn);
+    controls.appendChild(resetBtn);
+    el.appendChild(controls);
+    
+    // 버튼 클릭 이벤트 바인딩 (컨테이너 드래그 동작 간섭 방지)
+    const preventDrag = e => { e.stopPropagation(); };
+    controls.addEventListener('pointerdown', preventDrag);
+    controls.addEventListener('mousedown', preventDrag);
+    controls.addEventListener('click', e => e.stopPropagation());
+    
+    zoomInBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      e.preventDefault();
+      const prevScale = scale;
+      scale = Math.min(scale * 1.25, 8);
+      const rect = el.getBoundingClientRect();
+      const centerX = rect.width / 2;
+      const centerY = rect.height / 2;
+      translateX = centerX - (centerX - translateX) * (scale / prevScale);
+      translateY = centerY - (centerY - translateY) * (scale / prevScale);
+      updateTransform();
+    });
+    
+    zoomOutBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      e.preventDefault();
+      const prevScale = scale;
+      scale = Math.max(scale / 1.25, 0.3);
+      const rect = el.getBoundingClientRect();
+      const centerX = rect.width / 2;
+      const centerY = rect.height / 2;
+      translateX = centerX - (centerX - translateX) * (scale / prevScale);
+      translateY = centerY - (centerY - translateY) * (scale / prevScale);
+      updateTransform();
+    });
+    
+    resetBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      e.preventDefault();
+      translateX = 0;
+      translateY = 0;
+      scale = 1;
+      updateTransform();
+    });
+    
+    el.addEventListener('pointerdown', e => {
+      if (e.pointerType === 'mouse' && e.button !== 0) return; // 마우스는 좌클릭만
+      isDragging = true;
+      el.style.cursor = 'grabbing';
+      startX = e.clientX - translateX;
+      startY = e.clientY - translateY;
+      try { el.setPointerCapture(e.pointerId); } catch(_) {}
+      e.preventDefault();
+      e.stopPropagation();
+    });
+    
+    el.addEventListener('pointermove', e => {
+      if (!isDragging) return;
+      translateX = e.clientX - startX;
+      translateY = e.clientY - startY;
+      updateTransform();
+      e.stopPropagation();
+    });
+    
+    el.addEventListener('pointerup', e => {
+      if (isDragging) {
+        isDragging = false;
+        el.style.cursor = 'grab';
+        try { el.releasePointerCapture(e.pointerId); } catch(_) {}
+        e.stopPropagation();
+      }
+    });
+    
+    el.addEventListener('pointercancel', e => {
+      if (isDragging) {
+        isDragging = false;
+        el.style.cursor = 'grab';
+        try { el.releasePointerCapture(e.pointerId); } catch(_) {}
+        e.stopPropagation();
+      }
+    });
+    
+    el.addEventListener('wheel', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      const zoomFactor = 1.1;
+      const prevScale = scale;
+      
+      if (e.deltaY < 0) {
+        scale = Math.min(scale * zoomFactor, 8);
+      } else {
+        scale = Math.max(scale / zoomFactor, 0.3);
+      }
+      
+      const rect = el.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+      
+      translateX = mouseX - (mouseX - translateX) * (scale / prevScale);
+      translateY = mouseY - (mouseY - translateY) * (scale / prevScale);
+      
+      updateTransform();
+    }, { passive: false });
+    
+    el.addEventListener('dblclick', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      translateX = 0;
+      translateY = 0;
+      scale = 1;
+      updateTransform();
+    });
+  });
+}
 
 /* =========================================================================
    7.5) mermaid 다이어그램 렌더 (페이지 측정 전에 한 번 그려 정적 SVG 로 박제)

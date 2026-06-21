@@ -39,7 +39,7 @@ function hasMermaid(markdownText) {
     return /^`{3,}\s*mermaid\b/im.test(markdownText);
 }
 
-function assemble({ templateHtml, markdownText, config, pathResolver, mermaidJs }) {
+function assemble({ templateHtml, markdownText, config, pathResolver, mermaidUri }) {
     // 1. 이미지 및 리소스 상대 경로 치환
     const processedMarkdown = transformPaths(markdownText, pathResolver);
 
@@ -59,13 +59,10 @@ function assemble({ templateHtml, markdownText, config, pathResolver, mermaidJs 
         </script>
     `;
 
-    // 4. mermaid 다이어그램이 있을 때만 엔진 인라인 주입 (없는 문서는 그대로 가벼움).
-    //    replace 콜백으로 넣어 $ 특수치환 시퀀스 오작동 방지.
+    // 4. mermaid 다이어그램이 있을 때만 엔진 주입 (없는 문서는 그대로 가벼움).
     let head = configScript;
-    if (mermaidJs && hasMermaid(markdownText)) {
-        // 인라인 스크립트 조기 종료 방지: 본문 내 </script> 시퀀스 무력화
-        const safeJs = mermaidJs.replace(/<\/script/gi, '<\\/script');
-        const tag = `<script>${safeJs}</script>`;
+    if (mermaidUri && hasMermaid(markdownText)) {
+        const tag = `<script src="${mermaidUri}"></script>`;
         head += tag;
     }
     return result.replace('</head>', () => `${head}</head>`);

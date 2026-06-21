@@ -66,25 +66,21 @@ function activate(context) {
         };
 
         // 6. HTML 생성 헬퍼 함수
-        //    mermaid.min.js 는 문서에 mermaid 블록이 있을 때만 1회 읽어 캐시(없으면 안 읽음).
-        let mermaidJs = null;
-        function loadMermaid() {
-            if (mermaidJs !== null) return mermaidJs;
-            try {
-                mermaidJs = fs.readFileSync(path.join(context.extensionPath, 'mermaid.min.js'), 'utf8');
-            } catch (e) {
-                mermaidJs = ''; // 번들이 없으면 빈 문자열 → 주입 스킵, 소스 폴백
-            }
-            return mermaidJs;
-        }
         function generateHtml(docText) {
             const needMermaid = /^`{3,}\s*mermaid\b/im.test(docText);
+            let mermaidUri = null;
+            if (needMermaid) {
+                const mermaidPath = path.join(context.extensionPath, 'mermaid.min.js');
+                if (fs.existsSync(mermaidPath)) {
+                    mermaidUri = panel.webview.asWebviewUri(vscode.Uri.file(mermaidPath)).toString();
+                }
+            }
             return assemble({
                 templateHtml: htmlTemplate,
                 markdownText: docText,
                 config: savedConfig,
                 pathResolver,
-                mermaidJs: needMermaid ? loadMermaid() : null
+                mermaidUri
             });
         }
 
