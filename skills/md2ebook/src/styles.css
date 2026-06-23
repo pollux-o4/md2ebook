@@ -59,8 +59,8 @@
 }
 
 *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
-html,body{ margin:0; height:100%; overflow:hidden; background:var(--bg); }
-body{ font-family:var(--reader-font); color:var(--ink); }
+html,body{ margin:0 !important; padding:0 !important; height:100% !important; overflow:hidden !important; background:var(--bg) !important; }
+body{ font-family:var(--reader-font) !important; color:var(--ink) !important; margin:0 !important; padding:0 !important; }
 ::selection{ background:var(--sel); }
 
 /* ============================ 리더 셸 ============================ */
@@ -164,6 +164,10 @@ body{ font-family:var(--reader-font); color:var(--ink); }
 .page-pad .codeblock:hover .copy-btn{ opacity:1; }
 .page-pad .copy-btn:hover{ color:var(--ink); border-color:var(--accent); }
 .page-pad .copy-btn:active{ opacity:.5; }
+/* mermaid 다이어그램 — 가운데 정렬, 페이지 폭 초과 시 축소. 렌더 전 소스 텍스트는 숨김. */
+.page-pad .mermaid{ margin:0 0 1.2em; text-align:center; line-height:normal; }
+.page-pad .mermaid svg{ max-width:100%; height:auto; }
+.page-pad .mermaid:not([data-processed]){ visibility:hidden; font-size:0; }
 
 /* 이미지 라이트박스 (탭하여 확대) */
 .lightbox{ position:fixed; inset:0; z-index:70; display:none; align-items:center;
@@ -176,14 +180,14 @@ body{ font-family:var(--reader-font); color:var(--ink); }
 .page-pad ul,.page-pad ol{ margin:0 0 1.05em; padding-left:1.35em; }
 .page-pad li{ margin:.32em 0; }
 .page-pad li::marker{ color:var(--ink-soft); }
-.page-pad code{ font-family:var(--font-mono); font-size:.86em; background:var(--code-bg);
+.page-pad code{ font-family:var(--font-mono); font-size:.86em; background:var(--code-bg) !important; color:var(--ink) !important;
   padding:.08em .42em; border-radius:4px; white-space:nowrap; }
-.page-pad pre{ background:var(--code-bg); border-radius:8px; padding:14px 16px;
+.page-pad pre{ background:var(--code-bg) !important; border-radius:8px; padding:14px 16px;
   overflow-x:auto; margin:0 0 1.15em; line-height:1.55; }
-.page-pad pre code{ background:none; padding:0; white-space:pre; font-size:.82em; }
-.page-pad blockquote{ margin:0 0 1.15em; padding:.1em 0 .1em 1.05em;
-  border-left:2px solid var(--quote-rule); color:var(--ink-soft); font-size:.96em; }
-.page-pad blockquote p{ margin:.2em 0; }
+.page-pad pre code{ background:none !important; padding:0 !important; white-space:pre !important; font-size:.82em !important; color:var(--ink) !important; }
+.page-pad blockquote{ margin:0 0 1.15em !important; padding:.1em 0 .1em 1.05em !important;
+  border-left:2px solid var(--quote-rule) !important; color:var(--ink-soft) !important; font-size:.96em !important; background:transparent !important; }
+.page-pad blockquote p{ margin:.2em 0 !important; color:var(--ink-soft) !important; }
 .table-wrap{ overflow-x:auto; margin:0 0 1.2em; -webkit-overflow-scrolling:touch; }
 .page-pad table{ border-collapse:collapse; width:100%; font-size:.9em; }
 .page-pad th,.page-pad td{ border:1px solid var(--rule); padding:.5em .7em; text-align:left;

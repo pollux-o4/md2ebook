@@ -1235,7 +1235,7 @@ function initMermaidPanZoom(container) {
     el.appendChild(controls);
     
     // 버튼 클릭 이벤트 바인딩 (컨테이너 드래그 동작 간섭 방지)
-    const preventDrag = e => { e.stopPropagation(); };
+    const preventDrag = e => { e.stopPropagation(); e.preventDefault(); };
     controls.addEventListener('pointerdown', preventDrag);
     controls.addEventListener('mousedown', preventDrag);
     controls.addEventListener('click', e => e.stopPropagation());

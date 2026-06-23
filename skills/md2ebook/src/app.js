@@ -110,10 +110,15 @@ function parseMarkdown(md){
 
     // 코드펜스
     if (/^```/.test(line)){
+      const lang = (/^`{3,}\s*([\w-]*)/.exec(line)||[])[1] || '';
       let buf = []; i++;
       while (i < lines.length && !/^```/.test(lines[i])){ buf.push(lines[i]); i++; }
-      i++; html += '<div class="codeblock"><button class="copy-btn" type="button">복사</button>'
-        + '<pre><code>'+esc(buf.join('\n'))+'</code></pre></div>'; continue;
+      i++;
+      const src = buf.join('\n');
+      // mermaid 펜스 → 다이어그램 div. esc(src) 로 textContent=원본 보존(mermaid 가 읽음), data-src 는 캐시 키.
+      if (/^mermaid$/i.test(lang)){ html += '<div class="mermaid" data-src="'+attr(src)+'">'+esc(src)+'</div>'; continue; }
+      html += '<div class="codeblock"><button class="copy-btn" type="button">복사</button>'
+        + '<pre><code>'+esc(src)+'</code></pre></div>'; continue;
     }
     // 헤딩
     let h = /^(#{1,6})\s+(.*)$/.exec(line);
@@ -178,8 +183,28 @@ function parseMarkdown(md){
 }
 
 /* =========================================================================
-   2) 상태 + 영속화
+   2) 상태 + 영속화 (VS Code 웹뷰 브릿지 연동)
    ========================================================================= */
+const isVSCode = typeof acquireVsCodeApi === 'function' || window.IS_VSCODE_ENV;
+const vscode = isVSCode && typeof acquireVsCodeApi === 'function' ? acquireVsCodeApi() : null;
+
+function load(k, d){
+  if (isVSCode && window.VSCODE_CONFIG) {
+    if (k === 'br-settings') return window.VSCODE_CONFIG || d;
+  }
+  try{ return JSON.parse(localStorage.getItem(k)) ?? d; }catch(e){ return d; }
+}
+
+function save(k, v){
+  if (isVSCode && vscode) {
+    if (k === 'br-settings') {
+      vscode.postMessage({ command: 'saveConfig', config: v });
+    }
+    return;
+  }
+  try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){}
+}
+
 const $ = s => document.querySelector(s);
 const reader = $('#reader');
 const DEFAULTS = { theme:'paper', flip:'flip3d', size:18, lead:1.9, font:'sans' };
@@ -187,13 +212,9 @@ let settings = Object.assign({}, DEFAULTS, load('br-settings', {}));
 if (!settings.labelHues || typeof settings.labelHues !== 'object') settings.labelHues = {};
 const STORE_POS = 'br-pos';
 
-function load(k, d){ try{ return JSON.parse(localStorage.getItem(k)) ?? d; }catch(e){ return d; } }
-function save(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
-
 /* =========================================================================
    3) 페이지네이션 (H2 = 새 챕터, 높이 초과 시 자동 분할)
    ========================================================================= */
-// build.py 주입 시 닫는 스크립트 태그를 이스케이프하므로 파싱 전 원복(코드 예시 정확성)
 const rawMd = $('#book-md').textContent.replace(/<\\\/script>/g, '<\/script>');
 const sourceHtml = parseMarkdown(rawMd);
 const srcDoc = document.createElement('div');
@@ -207,12 +228,10 @@ const docKey = p => p + ':' + docTitle;
 $('#docTitle').textContent = docTitle;
 document.title = docTitle + ' · 책 리더';
 
-/* 체크박스 상태: data-task-idx -> bool, 문서별 localStorage 영속화.
-   마크다운의 [x] 가 기본값, 저장된 값이 있으면 그것이 우선. */
+/* 체크박스 상태: data-task-idx -> bool */
 const STORE_TASKS = docKey('br-tasks');
 let taskState = load(STORE_TASKS, {});
 if (!taskState || typeof taskState !== 'object') taskState = {};
-// 마운트된 패드의 체크박스에 저장된 상태를 재적용 (windowed mounting 대비 — 매 마운트마다 호출)
 function applyTasks(pad){
   pad.querySelectorAll('input[type=checkbox][data-task-idx]').forEach(cb => {
     const saved = taskState[cb.dataset.taskIdx];
@@ -223,18 +242,54 @@ function applyTasks(pad){
 let pages = [];        // {html, headings:[{id,level,text}]}
 const headingPage = {}; // id -> page index
 let current = 0;
-let tocItems = [];      // 캐시된 .toc-item 버튼들 (buildToc 에서 채움) — 크롬 갱신 시 querySelectorAll 회피
-// 스크롤 모드 활성 헤딩 추적 (IntersectionObserver)
-let scrollObserver = null;     // 현재 IO 인스턴스 (스크롤 모드에서만 살아있음)
-let scrollHeadings = [];       // 관측 중인 헤딩 노드 (DOM 순서)
-const scrollAboveTop = new Set(); // 상단 경계선 위로 지난 헤딩 id 집합 (IO 콜백이 갱신)
-let scrollActiveId = null;     // 현재 활성 헤딩 id (목차 강조용)
-let scrollChap = '';           // 현재 챕터 = 경계선 위 마지막 H1/H2 텍스트
+let tocItems = [];      // 캐시된 .toc-item 버튼들
+let scrollObserver = null;
+let scrollHeadings = [];
+const scrollAboveTop = new Set();
+let scrollActiveId = null;
+let scrollChap = '';
+
+// 페이지보다 큰 리스트(<ul>/<ol>)를 <li> 단위로 페이지 크기 조각들로 분할.
+// 한 항목씩 채우다 넘치면 끊어 새 리스트로 — <ol> 은 start 속성으로 번호 이어줌.
+function splitList(node, maxH, pad){
+  const items = Array.from(node.children);
+  const chunks = [];
+  let cur = node.cloneNode(false);
+  pad.textContent = ''; pad.appendChild(cur);
+  for (const li of items){
+    cur.appendChild(li.cloneNode(true));
+    if (pad.scrollHeight > maxH && cur.children.length > 1){
+      cur.removeChild(cur.lastChild);
+      chunks.push(cur);
+      cur = node.cloneNode(false);
+      pad.textContent = ''; pad.appendChild(cur);
+      cur.appendChild(li.cloneNode(true));
+    }
+  }
+  if (cur.children.length) chunks.push(cur);
+  if (node.tagName === 'OL'){
+    let n = parseInt(node.getAttribute('start') || '1', 10);
+    chunks.forEach(c => { c.setAttribute('start', String(n)); n += c.children.length; });
+  }
+  return chunks;
+}
 
 function paginate(){
   const pad = $('#padMeasure');
   const maxH = pad.clientHeight;
   pages = []; for (const k in headingPage) delete headingPage[k];
+
+  // 0) 페이지를 넘기는 큰 리스트는 미리 조각으로 펼친다(블록 단위 분할 불가 문제 해결).
+  const nodes = [];
+  for (const node of srcNodes){
+    pad.textContent = ''; pad.appendChild(node.cloneNode(true));
+    if (pad.scrollHeight > maxH && (node.tagName === 'UL' || node.tagName === 'OL')){
+      nodes.push(...splitList(node, maxH, pad));
+    } else {
+      nodes.push(node);
+    }
+  }
+
   let curNodes = [];
   const flush = () => {
     if (!curNodes.length) return;
@@ -244,7 +299,7 @@ function paginate(){
     curNodes = [];
   };
   pad.textContent = '';
-  for (const node of srcNodes){
+  for (const node of nodes){
     const isBreak = node.tagName === 'H1' || node.tagName === 'H2';
     if (isBreak && curNodes.length){ flush(); pad.textContent = ''; }
     curNodes.push(node);
@@ -270,15 +325,14 @@ const animLayer = $('#animLayer'), animShade = $('#animShade');
 const stage = $('#stage');
 let animating = false;
 
-function setHtml(pad, idx){ pad.innerHTML = (pages[idx] && pages[idx].html) || ''; pad.scrollTop = 0; applyTasks(pad); }
+function setHtml(pad, idx){ pad.innerHTML = (pages[idx] && pages[idx].html) || ''; pad.scrollTop = 0; applyTasks(pad); if (typeof initMermaidPanZoom === 'function') initMermaidPanZoom(pad); }
 
 function renderBase(){
-  if (settings.flip === 'scroll'){ padBelow.innerHTML = sourceHtml; applyTasks(padBelow); observeScrollHeadings(); }
+  // scroll 은 srcNodes(렌더된 mermaid 포함)에서 직접 — 캐시 문자열은 mermaid 렌더 전 상태라 안 씀
+  if (settings.flip === 'scroll'){ padBelow.innerHTML = srcNodes.map(n=>n.outerHTML).join(''); applyTasks(padBelow); if (typeof initMermaidPanZoom === 'function') initMermaidPanZoom(padBelow); observeScrollHeadings(); }
   else { setHtml(padBelow, current); disconnectScrollObserver(); }
 }
 
-// 스크롤 모드: padBelow 의 H1~H3 을 IntersectionObserver 로 관측해 활성 헤딩을 추적.
-// rootMargin 의 top -80px 로 "상단에서 80px 지난" 헤딩이 활성 후보가 되게 한다(기존 offsetTop<=80 과 동일 경계).
 function observeScrollHeadings(){
   disconnectScrollObserver();
   scrollHeadings = Array.from(padBelow.querySelectorAll('h1,h2,h3'));
@@ -286,7 +340,6 @@ function observeScrollHeadings(){
   scrollObserver = new IntersectionObserver(entries => {
     entries.forEach(e => {
       const rb = e.rootBounds;
-      // 헤딩 상단이 (조정된) 루트 상단선 위로 올라가면 "지난" 것으로 본다.
       const above = rb ? (e.boundingClientRect.top <= rb.top) : false;
       if (above) scrollAboveTop.add(e.target.id); else scrollAboveTop.delete(e.target.id);
     });
@@ -294,12 +347,12 @@ function observeScrollHeadings(){
   }, { root: stage, rootMargin: '-80px 0px 0px 0px', threshold: 0 });
   scrollHeadings.forEach(h => scrollObserver.observe(h));
 }
+
 function disconnectScrollObserver(){
   if (scrollObserver){ scrollObserver.disconnect(); scrollObserver = null; }
   scrollHeadings = []; scrollAboveTop.clear();
 }
 
-// 진행바·페이지수만 즉시 칠한다(넘김 시작 시 호출 → 게이지가 클릭에 바로 반응).
 function paintProgress(idx){
   const total = pages.length;
   $('#metaPage').textContent = (idx+1) + ' / ' + total;
@@ -309,14 +362,12 @@ function paintProgress(idx){
 function updateChrome(){
   if (settings.flip === 'scroll'){ updateChromeScroll(); return; }
   paintProgress(current);
-  // 현재 챕터(가장 가까운 H1/H2)
   let chap = '';
   for (let i = current; i >= 0; i--){
     const hs = pages[i].headings.filter(h=>h.level<=2);
     if (hs.length){ chap = hs[hs.length-1].text; break; }
   }
   $('#metaChap').textContent = chap;
-  // 목차 활성
   tocItems.forEach(el=>{
     el.classList.toggle('active', headingPage[el.dataset.id] === current);
   });
@@ -328,7 +379,6 @@ function updateChromeScroll(){
   const ratio = max > 0 ? stage.scrollTop / max : 0;
   $('#progFill').style.width = (ratio*100)+'%';
   $('#metaPage').textContent = Math.round(ratio*100) + '%';
-  // 화면 상단을 지난 마지막 헤딩 = 현재 챕터 + 목차 활성 (IntersectionObserver 가 채운 집합에서 도출)
   scrollChap = ''; scrollActiveId = null;
   scrollHeadings.forEach(h => { if (scrollAboveTop.has(h.id)){ if(+h.dataset.h<=2) scrollChap = h.textContent; scrollActiveId = h.id; } });
   $('#metaChap').textContent = scrollChap;
@@ -337,7 +387,6 @@ function updateChromeScroll(){
 
 function clamp(n){ return Math.max(0, Math.min(pages.length-1, n)); }
 
-// rAF 트윈 (백그라운드에서 rAF가 멈춰도 잠금이 풀리도록 워치독 포함)
 function tween(from, to, dur, step, done){
   const t0 = performance.now();
   const ease = p => 1 - Math.pow(1-p, 3);
@@ -355,7 +404,6 @@ function tween(from, to, dur, step, done){
 
 function endTurn(){ animLayer.style.display='none'; animLayer.style.transform=''; animLayer.style.opacity=1; animShade.style.opacity=0; animating=false; }
 
-// 넘김 진행 적용: prog 0~1, dir 'next'|'prev'
 function applyTurn(prog, dir, mode){
   if (mode === 'fade'){
     if (dir === 'next'){ animLayer.style.opacity = (1-prog); }
@@ -377,11 +425,11 @@ function prepareTurn(dir, mode){
   animLayer.classList.toggle('flipping', mode === 'flip3d');
   animShade.style.opacity = 0;
   if (dir === 'next'){
-    setHtml(padAnim, current);          // 떠나는 현재 페이지가 위
-    setHtml(padBelow, current+1);       // 다음 페이지가 아래에서 드러남
+    setHtml(padAnim, current);
+    setHtml(padBelow, current+1);
   } else {
-    setHtml(padAnim, current-1);        // 들어오는 이전 페이지가 위
-    setHtml(padBelow, current);         // 현재가 아래
+    setHtml(padAnim, current-1);
+    setHtml(padBelow, current);
   }
   animLayer.style.display = 'flex';
   applyTurn(0, dir, mode);
@@ -394,7 +442,7 @@ function go(dir){
   const mode = settings.flip;
   if (mode === 'scroll'){ current = target; renderBase(); updateChrome(); return; }
   animating = true;
-  paintProgress(target);   // 게이지는 넘김 애니와 동시에 글라이드 → 클릭에 즉시 반응
+  paintProgress(target);
   prepareTurn(dir, mode);
   tween(0, 1, 360, p => applyTurn(p, dir, mode), () => {
     current = target;
@@ -413,10 +461,7 @@ function bounce(dir){
   }, () => { el.style.transform = ''; });
 }
 
-/* ---- 콘텐츠 인터랙션 (코드 복사 / 이미지 줌 / 체크박스) ----
-   page-pad 에 위임. 핸들러는 stopPropagation 으로 stage 의 페이지 넘김 클릭을 막는다. */
-
-// 이미지 라이트박스: 재사용 오버레이 1개
+/* ---- 콘텐츠 인터랙션 ---- */
 let lightbox = null;
 function ensureLightbox(){
   if (lightbox) return lightbox;
@@ -435,7 +480,6 @@ function openLightbox(src, alt){
 }
 function closeLightbox(){ if (lightbox) lightbox.classList.remove('show'); }
 
-// 코드 복사: pre 의 textContent 를 클립보드로. file:// 대비 execCommand 폴백.
 function copyText(text, btn){
   const done = () => { const o = btn.textContent; btn.textContent = '복사됨';
     setTimeout(() => { btn.textContent = o; }, 1200); };
@@ -460,17 +504,44 @@ function bindContent(pad){
       if (pre) copyText(pre.textContent, btn);
       return;
     }
+    
+    // 로컬 링크 클릭 처리 (VS Code에 알려 열어주기)
+    const link = e.target.closest('a');
+    if (link) {
+      const href = link.getAttribute('href');
+      if (isVSCode && vscode && href && !/^(https?:|\/\/|mailto:)/i.test(href)) {
+        e.stopPropagation();
+        e.preventDefault();
+        vscode.postMessage({
+          command: 'openLink',
+          path: href
+        });
+        return;
+      }
+    }
+
     const img = e.target.closest('img');
     if (img){ e.stopPropagation(); openLightbox(img.src, img.alt); return; }
     const cb = e.target.closest('input[type=checkbox][data-task-idx]');
-    if (cb){ e.stopPropagation(); return; }   // 토글은 change 에서 처리, 넘김만 차단
+    if (cb){ e.stopPropagation(); return; }
   });
+
   pad.addEventListener('change', e => {
     const cb = e.target.closest('input[type=checkbox][data-task-idx]');
     if (!cb) return;
     e.stopPropagation();
-    taskState[cb.dataset.taskIdx] = cb.checked;
+    const idx = parseInt(cb.dataset.taskIdx, 10);
+    taskState[idx] = cb.checked;
     save(STORE_TASKS, taskState);
+
+    // VS Code 환경인 경우 백엔드 마크다운 원본 수정 요청
+    if (isVSCode && vscode) {
+      vscode.postMessage({
+        command: 'toggleTask',
+        taskIdx: idx,
+        checked: cb.checked
+      });
+    }
   });
 }
 bindContent(padBelow);
@@ -490,7 +561,6 @@ stage.addEventListener('pointermove', e => {
   const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
   if (!drag.active){
     if (Math.abs(dx) < 8 || Math.abs(dx) < Math.abs(dy)) return;
-    // 마우스는 드래그로 넘기지 않고 텍스트 선택을 허용 (데스크탑은 좌우 탭·키보드로 넘김)
     if (drag.type === 'mouse'){ drag = null; return; }
     drag.dir = dx < 0 ? 'next' : 'prev';
     const target = drag.dir === 'next' ? current+1 : current-1;
@@ -514,13 +584,13 @@ stage.addEventListener('pointerup', e => {
   lastSwipe = performance.now();
   const mode = settings.flip, dir = drag.dir;
   const dx = e.clientX - drag.x, dt = performance.now() - drag.t;
-  const vel = Math.abs(dx)/dt; // px/ms
+  const vel = Math.abs(dx)/dt;
   const prog = drag.prog || 0;
   const commit = prog > 0.5 || vel > 0.5;
   animating = true;
   const d = drag; drag = null;
   if (commit){
-    paintProgress(dir === 'next' ? current+1 : current-1);   // 게이지 즉시 반영
+    paintProgress(dir === 'next' ? current+1 : current-1);
     tween(prog, 1, 240*(1-prog)+80, p => applyTurn(p, dir, mode), () => {
       current = dir === 'next' ? current+1 : current-1;
       renderBase(); endTurn();
@@ -534,14 +604,14 @@ stage.addEventListener('pointerup', e => {
 });
 stage.addEventListener('pointercancel', () => { drag = null; reader.classList.remove('dragging'); });
 
-/* ---- 탭 영역 (오버레이는 통과시키고 stage 클릭 좌표로 판정 → 텍스트 선택 보존) ---- */
+/* ---- 탭 영역 ---- */
 let lastSwipe = 0;
 stage.addEventListener('click', e => {
   if (settings.flip === 'scroll') return;
-  if (performance.now() - lastSwipe < 400) return;      // 방금 스와이프로 넘겼으면 무시
-  if (e.target.closest('a')) return;                    // 링크 클릭은 통과
+  if (performance.now() - lastSwipe < 400) return;
+  if (e.target.closest('a')) return;
   const sel = window.getSelection && window.getSelection();
-  if (sel && String(sel).trim()) return;                // 텍스트를 선택 중이면 넘기지 않음
+  if (sel && String(sel).trim()) return;
   const x = e.clientX - stage.getBoundingClientRect().left;
   const w = stage.clientWidth;
   if (x < w * 0.30) go('prev');
@@ -593,7 +663,6 @@ function applySettings(){
   document.documentElement.style.setProperty('--reader-leading', settings.lead);
   document.documentElement.style.setProperty('--reader-font', settings.font==='serif'?'var(--font-serif)':'var(--font-sans)');
   reader.classList.toggle('scrollmode', settings.flip === 'scroll');
-  // UI 상태 반영
   document.querySelectorAll('#setTheme .swatch').forEach(s=>s.classList.toggle('on', s.dataset.theme===settings.theme));
   document.querySelectorAll('#setFlip button').forEach(s=>s.classList.toggle('on', s.dataset.flip===settings.flip));
   document.querySelectorAll('#setLead button').forEach(s=>s.classList.toggle('on', +s.dataset.lead===settings.lead));
@@ -602,7 +671,6 @@ function applySettings(){
   save('br-settings', settings);
 }
 
-// 라벨별 hue 를 스타일시트로 주입 (오버라이드 없으면 기본 hue). 칩·미리보기에 동시 적용.
 function labelHue(k){ return settings.labelHues[k] != null ? settings.labelHues[k] : hue(k); }
 function applyLabelStyle(){
   let css = '';
@@ -615,7 +683,6 @@ function applyLabelStyle(){
   el.textContent = css;
 }
 
-// 설정 패널의 "라벨 색": 문서에 쓰인 라벨을 색칩 그리드로. 칩 탭 → 그 칩만 편집.
 let editKey = null;
 function buildLabelControls(){
   const wrap = $('#setLabels'); if (!wrap) return;
@@ -632,7 +699,7 @@ function openLabelEditor(k){
   const chip = $('#labEditChip'); chip.dataset.key = k; chip.textContent = k;
   $('#labEditRange').value = labelHue(k);
   $('#labelEditor').hidden = false;
-  applyLabelStyle();   // 편집용 칩(같은 data-key)도 색 반영
+  applyLabelStyle();
   document.querySelectorAll('#setLabels .lbl').forEach(c => c.classList.toggle('sel', c.dataset.key === k));
 }
 function closeLabelEditor(){
@@ -642,7 +709,6 @@ function closeLabelEditor(){
 }
 
 function reflow(keepId){
-  // 재배치 전 기준 heading 기억
   let anchor = keepId;
   if (!anchor && pages[current]) anchor = (pages[current].headings[0]||{}).id;
   paginate();
@@ -653,7 +719,6 @@ function reflow(keepId){
   updateChrome();
 }
 
-// 스크롤 모드 진행 갱신
 stage.addEventListener('scroll', () => { if (settings.flip === 'scroll') updateChromeScroll(); }, { passive:true });
 
 /* 설정 이벤트 */
@@ -663,7 +728,6 @@ $('#setLead').addEventListener('click', e => { const b=e.target.closest('button'
 $('#setFont').addEventListener('click', e => { const b=e.target.closest('button'); if(!b)return; settings.font=b.dataset.font; applySettings(); reflow(); });
 $('#sizeUp').addEventListener('click', () => { settings.size=Math.min(28,settings.size+1); applySettings(); reflow(); });
 $('#sizeDown').addEventListener('click', () => { settings.size=Math.max(14,settings.size-1); applySettings(); reflow(); });
-// 라벨 색: 칩 탭 → 편집 토글, 슬라이더로 hue 조정(라이브), 리셋으로 자동 색 복귀
 $('#setLabels').addEventListener('click', e => {
   const c = e.target.closest('.lbl'); if(!c) return;
   (editKey === c.dataset.key) ? closeLabelEditor() : openLabelEditor(c.dataset.key);
@@ -696,18 +760,228 @@ $('#setClose').addEventListener('click', closeSheets);
 scrim.addEventListener('click', closeSheets);
 
 /* =========================================================================
+   7.4) mermaid SVG 드래그(Pan) 및 휠 확대/축소(Zoom) 기능
+   ========================================================================= */
+function initMermaidPanZoom(container) {
+  container.querySelectorAll('.mermaid').forEach(el => {
+    const svg = el.querySelector('svg');
+    if (!svg || el.getAttribute('data-panzoom-initialized')) return;
+    el.setAttribute('data-panzoom-initialized', 'true');
+    
+    el.style.position = 'relative';
+    el.style.overflow = 'hidden';
+    el.style.cursor = 'grab';
+    el.style.userSelect = 'none';
+    svg.style.transformOrigin = '0 0';
+    svg.style.transition = 'none';
+    
+    let isDragging = false;
+    let startX = 0, startY = 0;
+    let translateX = 0, translateY = 0;
+    let scale = 1;
+    
+    const updateTransform = () => {
+      svg.style.transform = `translate(${translateX}px, ${translateY}px) scale(${scale})`;
+    };
+    
+    // UI 컨트롤 버튼 패널 추가
+    const controls = document.createElement('div');
+    controls.className = 'mermaid-controls';
+    controls.style.cssText = 'position:absolute;bottom:10px;right:10px;display:flex;gap:6px;z-index:10;pointer-events:auto;';
+    
+    const btnStyle = 'width:28px;height:28px;border:1px solid var(--chrome-rule,#ddd);background:var(--page,#faf6ec);color:var(--ink,#333);font-size:15px;font-weight:bold;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,0.1);user-select:none;transition:background 0.15s, opacity 0.15s;opacity:0.85;';
+    
+    const zoomInBtn = document.createElement('button');
+    zoomInBtn.innerHTML = '＋';
+    zoomInBtn.style.cssText = btnStyle;
+    zoomInBtn.title = '확대';
+    
+    const zoomOutBtn = document.createElement('button');
+    zoomOutBtn.innerHTML = '－';
+    zoomOutBtn.style.cssText = btnStyle;
+    zoomOutBtn.title = '축소';
+    
+    const resetBtn = document.createElement('button');
+    resetBtn.innerHTML = '⟲';
+    resetBtn.style.cssText = btnStyle;
+    resetBtn.title = '초기화';
+    
+    // 버튼 마우스 오버 효과
+    [zoomInBtn, zoomOutBtn, resetBtn].forEach(btn => {
+      btn.addEventListener('mouseenter', () => { btn.style.background = 'var(--chrome-rule, #efe8d8)'; btn.style.opacity = '1'; });
+      btn.addEventListener('mouseleave', () => { btn.style.background = 'var(--page, #faf6ec)'; btn.style.opacity = '0.85'; });
+    });
+    
+    controls.appendChild(zoomInBtn);
+    controls.appendChild(zoomOutBtn);
+    controls.appendChild(resetBtn);
+    el.appendChild(controls);
+    
+    // 버튼 클릭 이벤트 바인딩 (컨테이너 드래그 동작 간섭 방지)
+    const preventDrag = e => { e.stopPropagation(); e.preventDefault(); };
+    controls.addEventListener('pointerdown', preventDrag);
+    controls.addEventListener('mousedown', preventDrag);
+    controls.addEventListener('click', e => e.stopPropagation());
+    
+    zoomInBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      e.preventDefault();
+      const prevScale = scale;
+      scale = Math.min(scale * 1.25, 8);
+      const rect = el.getBoundingClientRect();
+      const centerX = rect.width / 2;
+      const centerY = rect.height / 2;
+      translateX = centerX - (centerX - translateX) * (scale / prevScale);
+      translateY = centerY - (centerY - translateY) * (scale / prevScale);
+      updateTransform();
+    });
+    
+    zoomOutBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      e.preventDefault();
+      const prevScale = scale;
+      scale = Math.max(scale / 1.25, 0.3);
+      const rect = el.getBoundingClientRect();
+      const centerX = rect.width / 2;
+      const centerY = rect.height / 2;
+      translateX = centerX - (centerX - translateX) * (scale / prevScale);
+      translateY = centerY - (centerY - translateY) * (scale / prevScale);
+      updateTransform();
+    });
+    
+    resetBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      e.preventDefault();
+      translateX = 0;
+      translateY = 0;
+      scale = 1;
+      updateTransform();
+    });
+    
+    el.addEventListener('pointerdown', e => {
+      if (e.pointerType === 'mouse' && e.button !== 0) return; // 마우스는 좌클릭만
+      isDragging = true;
+      el.style.cursor = 'grabbing';
+      startX = e.clientX - translateX;
+      startY = e.clientY - translateY;
+      try { el.setPointerCapture(e.pointerId); } catch(_) {}
+      e.preventDefault();
+      e.stopPropagation();
+    });
+    
+    el.addEventListener('pointermove', e => {
+      if (!isDragging) return;
+      translateX = e.clientX - startX;
+      translateY = e.clientY - startY;
+      updateTransform();
+      e.stopPropagation();
+    });
+    
+    el.addEventListener('pointerup', e => {
+      if (isDragging) {
+        isDragging = false;
+        el.style.cursor = 'grab';
+        try { el.releasePointerCapture(e.pointerId); } catch(_) {}
+        e.stopPropagation();
+      }
+    });
+    
+    el.addEventListener('pointercancel', e => {
+      if (isDragging) {
+        isDragging = false;
+        el.style.cursor = 'grab';
+        try { el.releasePointerCapture(e.pointerId); } catch(_) {}
+        e.stopPropagation();
+      }
+    });
+    
+    el.addEventListener('wheel', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      const zoomFactor = 1.1;
+      const prevScale = scale;
+      
+      if (e.deltaY < 0) {
+        scale = Math.min(scale * zoomFactor, 8);
+      } else {
+        scale = Math.max(scale / zoomFactor, 0.3);
+      }
+      
+      const rect = el.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+      
+      translateX = mouseX - (mouseX - translateX) * (scale / prevScale);
+      translateY = mouseY - (mouseY - translateY) * (scale / prevScale);
+      
+      updateTransform();
+    }, { passive: false });
+    
+    el.addEventListener('dblclick', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      translateX = 0;
+      translateY = 0;
+      scale = 1;
+      updateTransform();
+    });
+  });
+}
+
+/* =========================================================================
+   7.5) mermaid 다이어그램 렌더 (페이지 측정 전에 한 번 그려 정적 SVG 로 박제)
+   - 캐시(소스 해시) 로 안 바뀐 다이어그램 재렌더 회피 → 실시간 편집도 빠름
+   - 항상 data-processed 표기(성공/폴백 모두) → 미처리 숨김 CSS 가 영구화되지 않음
+   ========================================================================= */
+const mmdCache = new Map();   // data-src 원본 → 렌더된 innerHTML(svg)
+let mmdInit = false;
+async function renderMermaidIn(container){
+  const els = Array.from(container.querySelectorAll('.mermaid'));
+  if (!els.length) return;
+  // 엔진 없음 → 소스를 코드블록으로 폴백(안 보이게 두지 않음)
+  if (!window.mermaid){
+    els.forEach(el => { el.innerHTML = '<pre><code>'+esc(el.getAttribute('data-src')||el.textContent)+'</code></pre>'; el.setAttribute('data-processed','fallback'); });
+    return;
+  }
+  if (!mmdInit){
+    window.mermaid.initialize({ startOnLoad:false, securityLevel:'loose',
+      theme: /black|gray/.test(settings.theme) ? 'dark' : 'default' });
+    mmdInit = true;
+  }
+  const pending = [];
+  els.forEach((el, k) => {
+    const src = el.getAttribute('data-src') || '';
+    if (mmdCache.has(src)){ el.innerHTML = mmdCache.get(src); el.setAttribute('data-processed','cache'); }
+    else { el.removeAttribute('data-processed'); el.textContent = src; el.id = 'mmd-'+k+'-'+(src.length); pending.push(el); }
+  });
+  if (!pending.length) return;
+  // mermaid 는 레이아웃 측정(getBBox)에 실제 DOM 부착이 필요 → 화면 밖 holder 에 잠깐 붙였다 뗀다
+  const holder = document.createElement('div');
+  const w = ($('#padMeasure') && $('#padMeasure').clientWidth) || 700;
+  holder.style.cssText = 'position:absolute;left:-99999px;top:0;visibility:hidden;width:'+w+'px;';
+  const parked = container.parentNode;            // 원위치 기억(있다면)
+  holder.appendChild(container);
+  document.body.appendChild(holder);
+  try { await window.mermaid.run({ nodes: pending }); }
+  catch(e){ pending.forEach(el => { el.innerHTML = '<pre><code>'+esc(el.getAttribute('data-src')||'')+'</code></pre>'; }); }
+  pending.forEach(el => { el.setAttribute('data-processed', el.getAttribute('data-processed')||'1'); mmdCache.set(el.getAttribute('data-src')||'', el.innerHTML); });
+  document.body.removeChild(holder);
+  if (parked) parked.appendChild(container); else holder.removeChild(container);
+}
+
+/* =========================================================================
    8) 부팅
    ========================================================================= */
-function boot(){
+async function boot(){
   applySettings();
   applyLabelStyle();
   buildLabelControls();
+  await renderMermaidIn(srcDoc);
   paginate();
   buildToc();
   current = clamp(load(docKey(STORE_POS), 0));
   renderBase();
   updateChrome();
-  // 첫 진입 힌트
   if (!load('br-hinted', false)){
     const hint = $('#hint'); hint.classList.add('show');
     setTimeout(()=>hint.classList.remove('show'), 3200);
@@ -716,5 +990,25 @@ function boot(){
 }
 boot();
 
-// 리사이즈 시 재배치(디바운스)
 let rt; window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(()=>reflow(), 200); });
+
+/* =========================================================================
+   9) VS Code 웹뷰 실시간 양방향 통신 수신부
+   ========================================================================= */
+if (isVSCode) {
+  window.addEventListener('message', async event => {
+    const message = event.data;
+    if (message.command === 'updateContent') {
+      const safeMd = message.markdown.replace(/<\\\/script>/g, '<\/script>');
+      const updatedHtml = parseMarkdown(safeMd);
+      srcDoc.innerHTML = updatedHtml;
+      await renderMermaidIn(srcDoc);   // 캐시 덕에 안 바뀐 다이어그램은 즉시
+      srcNodes.length = 0;
+      srcNodes.push(...srcDoc.children);
+      const h1 = srcDoc.querySelector('h1');
+      const docTitle = h1 ? h1.textContent : '책';
+      $('#docTitle').textContent = docTitle;
+      reflow();
+    }
+  });
+}
