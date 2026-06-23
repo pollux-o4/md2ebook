@@ -178,6 +178,9 @@ function parseMarkdown(md){
       buf.push(lines[i]); i++;
     }
     if (buf.length) html += '<p>'+inline(buf.join(' '))+'</p>';
+    // 블록 문법처럼 보이나 미완성인 줄(예: 구분선 없는 표 행 `| x |`)은 위 단락 루프가 건너뛴다.
+    // 그대로 두면 i 가 안 늘어 무한 루프 → 화면 백지. 단락으로 흘리고 전진시킨다.
+    else { html += '<p>'+inline(line)+'</p>'; i++; }
   }
   return html;
 }
@@ -223,7 +226,7 @@ const srcNodes = Array.from(srcDoc.children);
 
 // 문서 제목
 const h1 = srcDoc.querySelector('h1');
-const docTitle = h1 ? h1.textContent : '책';
+const docTitle = h1 ? h1.textContent : (window.VSCODE_DOC_NAME || '책');
 const docKey = p => p + ':' + docTitle;
 $('#docTitle').textContent = docTitle;
 document.title = docTitle + ' · 책 리더';
@@ -1006,7 +1009,7 @@ if (isVSCode) {
       srcNodes.length = 0;
       srcNodes.push(...srcDoc.children);
       const h1 = srcDoc.querySelector('h1');
-      const docTitle = h1 ? h1.textContent : '책';
+      const docTitle = h1 ? h1.textContent : (window.VSCODE_DOC_NAME || '책');
       $('#docTitle').textContent = docTitle;
       reflow();
     }

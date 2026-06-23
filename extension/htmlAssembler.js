@@ -39,7 +39,7 @@ function hasMermaid(markdownText) {
     return /^`{3,}\s*mermaid\b/im.test(markdownText);
 }
 
-function assemble({ templateHtml, markdownText, config, pathResolver, mermaidUri }) {
+function assemble({ templateHtml, markdownText, config, pathResolver, mermaidUri, docName }) {
     // 1. 이미지 및 리소스 상대 경로 치환
     const processedMarkdown = transformPaths(markdownText, pathResolver);
 
@@ -56,6 +56,7 @@ function assemble({ templateHtml, markdownText, config, pathResolver, mermaidUri
         <script>
             window.VSCODE_CONFIG = ${JSON.stringify(config)};
             window.IS_VSCODE_ENV = true;
+            window.VSCODE_DOC_NAME = ${JSON.stringify(docName || '')};
         </script>
     `;
 
