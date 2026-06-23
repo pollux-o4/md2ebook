@@ -80,7 +80,8 @@ function activate(context) {
                 markdownText: docText,
                 config: savedConfig,
                 pathResolver,
-                mermaidUri
+                mermaidUri,
+                docName: path.basename(document.uri.fsPath).replace(/\.md$/i, '')
             });
         }
 
