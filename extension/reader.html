@@ -310,7 +310,22 @@ body{ font-family:var(--reader-font) !important; color:var(--ink) !important; ma
   .prog-track,.prog-meta{ width:84%; }
   .topbar .doc-title{ font-size:13.5px; }
 }
-@media print{ .chrome,.tap-zones,.scrim,.sheet,.hint{ display:none !important; } }
+@media print{ .chrome,.tap-zones,.scrim,.sheet,.hint,.search-bar{ display:none !important; } }
+
+/* 리더 내 검색바 (Ctrl+F) */
+.search-bar{ position:fixed; top:54px; right:14px; z-index:60; display:flex; align-items:center; gap:3px;
+  background:var(--chrome); border:1px solid var(--chrome-rule); border-radius:9px; padding:5px 7px;
+  box-shadow:0 6px 22px var(--overlay); }
+.search-bar[hidden]{ display:none; }
+.search-bar input{ border:0; background:transparent; color:var(--ink); font:inherit; font-size:14px;
+  padding:3px 5px; width:168px; outline:none; }
+.search-count{ font-size:12px; color:var(--ink-soft); min-width:54px; text-align:center;
+  font-variant-numeric:tabular-nums; }
+.search-btn{ border:0; background:transparent; color:var(--chrome-ink); cursor:pointer; font-size:13px;
+  line-height:1; padding:4px 6px; border-radius:6px; }
+.search-btn:hover{ background:var(--rule); }
+.page-pad mark.search-hit{ background:rgba(220,170,40,.42); color:inherit; border-radius:2px; padding:0 1px; }
+.page-pad mark.search-hit.active{ background:var(--accent); color:#fff; }
 </style>
 </head>
 <body>
@@ -328,6 +343,14 @@ body{ font-family:var(--reader-font) !important; color:var(--ink) !important; ma
     <div class="doc-title" id="docTitle">책</div>
     <button class="btn aa" id="btnSettings" aria-label="설정">Aa</button>
   </header>
+
+  <div class="search-bar" id="searchBar" hidden>
+    <input type="text" id="searchInput" placeholder="검색…" aria-label="검색" autocomplete="off" spellcheck="false" />
+    <span class="search-count" id="searchCount"></span>
+    <button class="search-btn" id="searchPrev" title="이전 (Shift+Enter)" aria-label="이전">▲</button>
+    <button class="search-btn" id="searchNext" title="다음 (Enter)" aria-label="다음">▼</button>
+    <button class="search-btn" id="searchClose" title="닫기 (Esc)" aria-label="닫기">✕</button>
+  </div>
 
   <main class="stage" id="stage">
     <div class="layer below"><div class="page"><div class="page-pad" id="padBelow"></div><div class="page-shade"></div></div></div>
@@ -709,6 +732,8 @@ function applyTasks(pad){
 
 let pages = [];        // {html, headings:[{id,level,text}]}
 const headingPage = {}; // id -> page index
+let searchIndex = [];   // [{page, text}] — 페이지 분할과 무관한 전체 노드 검색 인덱스
+let srchQuery = '', srchHits = [], srchHI = 0, srchMarks = [], srchRenderedPage = -1, searchBarOpen = false;
 let current = 0;
 let tocItems = [];      // 캐시된 .toc-item 버튼들
 let scrollObserver = null;
@@ -759,10 +784,12 @@ function paginate(){
   }
 
   let curNodes = [];
+  const nodePage = new Map();   // 분할 후 각 노드 → 소속 페이지 인덱스 (검색 점프용)
   const flush = () => {
     if (!curNodes.length) return;
     const headings = curNodes.filter(n=>/^H[1-3]$/.test(n.tagName))
       .map(n=>({ id:n.id, level:+n.dataset.h, text:n.textContent }));
+    curNodes.forEach(n => nodePage.set(n, pages.length));
     pages.push({ html: curNodes.map(n=>n.outerHTML).join(''), headings });
     curNodes = [];
   };
@@ -783,6 +810,8 @@ function paginate(){
   }
   flush();
   pages.forEach((p, idx) => p.headings.forEach(h => { if (headingPage[h.id] === undefined) headingPage[h.id] = idx; }));
+  // 검색 인덱스: 분할된 노드 단위로 텍스트 + 소속 페이지 (브라우저 기본 Ctrl+F 가 못 보는 다른 페이지까지 커버)
+  searchIndex = nodes.map(n => ({ page: nodePage.get(n) ?? 0, text: (n.textContent || '').toLowerCase() }));
 }
 
 /* =========================================================================
@@ -1089,9 +1118,11 @@ stage.addEventListener('click', e => {
 
 /* ---- 키보드 ---- */
 window.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && (e.key === 'f' || e.key === 'F')){ e.preventDefault(); openSearch(); return; }
+  if (e.key === 'Escape'){ if (searchBarOpen) closeSearch(); else closeSheets(); return; }
+  if (/^(INPUT|TEXTAREA)$/.test((document.activeElement||{}).tagName || '')) return;  // 입력 중엔 페이지 네비 무시
   if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') { e.preventDefault(); go('next'); }
   else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); go('prev'); }
-  else if (e.key === 'Escape') closeSheets();
 });
 
 /* =========================================================================
@@ -1121,6 +1152,98 @@ function jumpTo(id){
   current = clamp(idx);
   renderBase(); updateChrome();
 }
+
+/* =========================================================================
+   6.5) 리더 내 검색 (Ctrl+F) — srcNodes 전체를 검색해 페이지 분할을 넘어 찾는다
+   ========================================================================= */
+// pad 안 텍스트에서 q 출현부를 <mark> 로 감싸고, 그 mark 들을 문서 순서로 반환. (svg·기존 mark·복사버튼 제외)
+function highlightPad(pad, q){
+  const marks = [];
+  if (!q) return marks;
+  const walker = document.createTreeWalker(pad, NodeFilter.SHOW_TEXT, {
+    acceptNode: n => (n.nodeValue && n.nodeValue.toLowerCase().includes(q)
+      && !(n.parentElement && n.parentElement.closest('svg, mark, .copy-btn')))
+      ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT
+  });
+  const tns = []; let t; while ((t = walker.nextNode())) tns.push(t);
+  tns.forEach(tn => {
+    const text = tn.nodeValue, lower = text.toLowerCase();
+    const frag = document.createDocumentFragment();
+    let last = 0, idx = lower.indexOf(q);
+    while (idx >= 0){
+      if (idx > last) frag.appendChild(document.createTextNode(text.slice(last, idx)));
+      const mk = document.createElement('mark'); mk.className = 'search-hit';
+      mk.textContent = text.slice(idx, idx + q.length);
+      frag.appendChild(mk); marks.push(mk);
+      last = idx + q.length; idx = lower.indexOf(q, last);
+    }
+    if (last < text.length) frag.appendChild(document.createTextNode(text.slice(last)));
+    tn.parentNode.replaceChild(frag, tn);
+  });
+  return marks;
+}
+function clearSearchMarks(pad){
+  pad.querySelectorAll('mark.search-hit').forEach(m => m.replaceWith(document.createTextNode(m.textContent)));
+  pad.normalize();
+}
+function updateSearchCount(){
+  $('#searchCount').textContent = srchHits.length ? (srchHI+1)+' / '+srchHits.length : (srchQuery ? '없음' : '');
+}
+function doSearch(raw){
+  const q = (raw || '').trim().toLowerCase();
+  srchQuery = q; srchHI = 0; srchRenderedPage = -1; srchHits = [];
+  clearSearchMarks(padBelow); srchMarks = [];
+  if (!q){ updateSearchCount(); return; }
+  if (settings.flip === 'scroll'){
+    // 스크롤 모드: padBelow 에 전체가 이미 있으므로 통째로 하이라이트하고 마크 단위로 이동.
+    srchMarks = highlightPad(padBelow, q);
+    srchHits = srchMarks.map((_, i) => ({ scroll: true, i }));
+  } else {
+    // 페이지 모드: 전체 인덱스에서 출현부를 모아 {페이지, 그 페이지 내 순번} 으로 보관.
+    const perPage = {};
+    searchIndex.forEach(e => {
+      let idx = e.text.indexOf(q);
+      while (idx >= 0){ perPage[e.page] = perPage[e.page] || 0; srchHits.push({ page: e.page, m: perPage[e.page]++ }); idx = e.text.indexOf(q, idx + q.length); }
+    });
+  }
+  if (srchHits.length) showHit(0); else updateSearchCount();
+}
+function showHit(hi){
+  if (!srchHits.length){ updateSearchCount(); return; }
+  srchHI = (hi % srchHits.length + srchHits.length) % srchHits.length;
+  const h = srchHits[srchHI];
+  let mk;
+  if (h.scroll){ mk = srchMarks[h.i]; }
+  else {
+    if (h.page !== srchRenderedPage){
+      current = clamp(h.page); renderBase(); updateChrome();
+      clearSearchMarks(padBelow); srchMarks = highlightPad(padBelow, srchQuery); srchRenderedPage = h.page;
+    }
+    mk = srchMarks[h.m];
+  }
+  padBelow.querySelectorAll('mark.search-hit.active').forEach(m => m.classList.remove('active'));
+  if (mk){ mk.classList.add('active'); mk.scrollIntoView({ block: 'center' }); }
+  updateSearchCount();
+}
+function nextMatch(){ showHit(srchHI + 1); }
+function prevMatch(){ showHit(srchHI - 1); }
+function openSearch(){
+  searchBarOpen = true; $('#searchBar').hidden = false;
+  const inp = $('#searchInput'); inp.focus(); inp.select();
+  if (inp.value.trim()) doSearch(inp.value);
+}
+function closeSearch(){
+  searchBarOpen = false; $('#searchBar').hidden = true;
+  clearSearchMarks(padBelow); srchHits = []; srchMarks = []; srchQuery = '';
+}
+$('#searchInput').addEventListener('input', e => doSearch(e.target.value));
+$('#searchInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter'){ e.preventDefault(); e.shiftKey ? prevMatch() : nextMatch(); }
+  else if (e.key === 'Escape'){ e.preventDefault(); closeSearch(); }
+});
+$('#searchNext').addEventListener('click', nextMatch);
+$('#searchPrev').addEventListener('click', prevMatch);
+$('#searchClose').addEventListener('click', closeSearch);
 
 /* =========================================================================
    6) 설정 적용
@@ -1185,6 +1308,7 @@ function reflow(keepId){
   renderBase();
   buildToc();
   updateChrome();
+  if (searchBarOpen && srchQuery) doSearch($('#searchInput').value);   // 재분할 후 검색 결과·하이라이트 갱신
 }
 
 stage.addEventListener('scroll', () => { if (settings.flip === 'scroll') updateChromeScroll(); }, { passive:true });

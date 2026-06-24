@@ -303,4 +303,19 @@ body{ font-family:var(--reader-font) !important; color:var(--ink) !important; ma
   .prog-track,.prog-meta{ width:84%; }
   .topbar .doc-title{ font-size:13.5px; }
 }
-@media print{ .chrome,.tap-zones,.scrim,.sheet,.hint{ display:none !important; } }
+@media print{ .chrome,.tap-zones,.scrim,.sheet,.hint,.search-bar{ display:none !important; } }
+
+/* 리더 내 검색바 (Ctrl+F) */
+.search-bar{ position:fixed; top:54px; right:14px; z-index:60; display:flex; align-items:center; gap:3px;
+  background:var(--chrome); border:1px solid var(--chrome-rule); border-radius:9px; padding:5px 7px;
+  box-shadow:0 6px 22px var(--overlay); }
+.search-bar[hidden]{ display:none; }
+.search-bar input{ border:0; background:transparent; color:var(--ink); font:inherit; font-size:14px;
+  padding:3px 5px; width:168px; outline:none; }
+.search-count{ font-size:12px; color:var(--ink-soft); min-width:54px; text-align:center;
+  font-variant-numeric:tabular-nums; }
+.search-btn{ border:0; background:transparent; color:var(--chrome-ink); cursor:pointer; font-size:13px;
+  line-height:1; padding:4px 6px; border-radius:6px; }
+.search-btn:hover{ background:var(--rule); }
+.page-pad mark.search-hit{ background:rgba(220,170,40,.42); color:inherit; border-radius:2px; padding:0 1px; }
+.page-pad mark.search-hit.active{ background:var(--accent); color:#fff; }

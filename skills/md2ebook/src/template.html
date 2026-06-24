@@ -24,6 +24,14 @@
     <button class="btn aa" id="btnSettings" aria-label="설정">Aa</button>
   </header>
 
+  <div class="search-bar" id="searchBar" hidden>
+    <input type="text" id="searchInput" placeholder="검색…" aria-label="검색" autocomplete="off" spellcheck="false" />
+    <span class="search-count" id="searchCount"></span>
+    <button class="search-btn" id="searchPrev" title="이전 (Shift+Enter)" aria-label="이전">▲</button>
+    <button class="search-btn" id="searchNext" title="다음 (Enter)" aria-label="다음">▼</button>
+    <button class="search-btn" id="searchClose" title="닫기 (Esc)" aria-label="닫기">✕</button>
+  </div>
+
   <main class="stage" id="stage">
     <div class="layer below"><div class="page"><div class="page-pad" id="padBelow"></div><div class="page-shade"></div></div></div>
     <div class="layer anim" id="animLayer"><div class="page"><div class="page-pad" id="padAnim"></div><div class="page-shade" id="animShade"></div></div></div>
