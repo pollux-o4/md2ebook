@@ -84,7 +84,12 @@ function renderList(items){
   let out = ''; const stack = [];   // stack: [{indent, ordered}]
   const closeTo = n => { while (stack.length > n){ const t = stack.pop();
     out += '</li>' + (t.ordered ? '</ol>' : '</ul>'); } };
-  items.forEach(it => {
+  items.forEach((it, idx) => {
+    // 연속 문단(pseudo) — 소유 레벨보다 깊은 하위 리스트를 닫고, 그 항목 <li> 안에 <p> 로 넣는다(순서·소속 보존).
+    if (it.para != null){
+      while (stack.length && it.indent < stack[stack.length-1].indent) closeTo(stack.length-1);
+      out += '<p>'+inline(it.para)+'</p>'; return;
+    }
     while (stack.length && it.indent < stack[stack.length-1].indent) closeTo(stack.length-1);
     const top = stack[stack.length-1];
     if (top && it.indent <= top.indent){ out += '</li>'; }
@@ -93,7 +98,11 @@ function renderList(items){
     const cb = /^\[([ xX])\]\s+([\s\S]*)$/.exec(it.text);
     if (cb){ const ck = cb[1].toLowerCase()==='x' ? ' checked' : '';
       out += '<li class="task"><input type="checkbox" data-task-idx="'+(taskIdx++)+'"'+ck+'> '+inline(cb[2]); }
-    else { out += '<li>'+inline(it.text); }
+    else {
+      // 바로 뒤에 같은 레벨 연속 문단이 오면 첫 줄도 <p> 로 — 첫 줄~문단 사이 간격 확보.
+      const nx = items[idx+1];
+      out += (nx && nx.para != null && nx.indent === it.indent) ? '<li><p>'+inline(it.text)+'</p>' : '<li>'+inline(it.text);
+    }
   });
   closeTo(0);
   return out;
@@ -134,7 +143,11 @@ function parseMarkdown(md){
     if (/^>\s?/.test(line)){
       let buf = [];
       while (i < lines.length && /^>\s?/.test(lines[i])){ buf.push(lines[i].replace(/^>\s?/,'')); i++; }
-      html += '<blockquote>'+buf.map(b=> b.trim()? '<p>'+inline(b)+'</p>':'').join('')+'</blockquote>';
+      // 빈 인용줄로 문단 분리, 그 안의 줄바꿈은 <br> 로 1:1 보존.
+      const groups = []; let cur = [];
+      buf.forEach(b => { if (b.trim()===''){ if (cur.length){ groups.push(cur); cur = []; } } else cur.push(b); });
+      if (cur.length) groups.push(cur);
+      html += '<blockquote>'+groups.map(g => '<p>'+inline(g.join('<br>'))+'</p>').join('')+'</blockquote>';
       continue;
     }
     // 표
@@ -157,10 +170,45 @@ function parseMarkdown(md){
       const items = [];
       while (i < lines.length){
         const m = liRe.exec(lines[i]);
-        if (!m) break;
-        items.push({ indent: m[1].replace(/\t/g,'    ').length,
-                     ordered: /\d/.test(m[2]), text: m[3] });
-        i++;
+        if (m){
+          items.push({ indent: m[1].replace(/\t/g,'    ').length,
+                       ordered: /\d/.test(m[2]), text: m[3] });
+          i++; continue;
+        }
+        // 빈 줄 뒤: 또 목록이면 같은 리스트로 계속(loose), 더 들여쓴 문단이면 직전 항목에 흡수, 그 외엔 종료.
+        if (/^\s*$/.test(lines[i])){
+          let j = i; while (j < lines.length && /^\s*$/.test(lines[j])) j++;
+          if (j >= lines.length || !items.length) break;
+          if (liRe.test(lines[j])){
+            const nm = liRe.exec(lines[j]);
+            const nInd = nm[1].replace(/\t/g,'    ').length, nOrd = /\d/.test(nm[2]), root = items[0];
+            // 더 깊으면 중첩으로, 같은 루트 레벨이면 같은 종류(순서/비순서)일 때만 같은 리스트로 이어붙임.
+            if (nInd > root.indent || (nInd === root.indent && nOrd === root.ordered)){ i = j; continue; }
+            break;   // 루트 레벨에서 종류 다름 → 별개 리스트
+          }
+          const ni = (lines[j].match(/^(\s*)/)[1]).replace(/\t/g,'    ').length;
+          if (ni > items[0].indent){
+            i = j; const buf = [];
+            while (i < lines.length && !/^\s*$/.test(lines[i]) && !liRe.test(lines[i])){ buf.push(lines[i].trim()); i++; }
+            // 소유 항목 = ni 보다 얕은 가장 깊은 실제 항목. 그 레벨로 연속 문단(pseudo)을 스트림에 끼운다.
+            let owner = items[0];
+            for (let k = items.length-1; k >= 0; k--){ if (items[k].para == null && items[k].indent < ni){ owner = items[k]; break; } }
+            items.push({ para: buf.join('<br>'), indent: owner.indent });
+            continue;
+          }
+        }
+        else {
+          // 빈 줄 없이 바로 이어지는 들여쓴 비-목록 줄 → 직전 항목 문단에 이어붙임(lazy continuation).
+          const ci = (lines[i].match(/^(\s*)/)[1]).replace(/\t/g,'    ').length;
+          if (items.length && ci > items[0].indent){
+            const buf = [];
+            while (i < lines.length && !/^\s*$/.test(lines[i]) && !liRe.test(lines[i])){ buf.push(lines[i].trim()); i++; }
+            const last = items[items.length-1];
+            if (last.para != null) last.para += '<br>' + buf.join('<br>'); else last.text += '<br>' + buf.join('<br>');
+            continue;
+          }
+        }
+        break;
       }
       html += renderList(items); continue;
     }
@@ -177,7 +225,7 @@ function parseMarkdown(md){
     while (i < lines.length && !/^\s*$/.test(lines[i]) && !/^(#{1,6}\s|>|```|\||\s*[-*]\s|\s*\d+\.\s|---)/.test(lines[i])){
       buf.push(lines[i]); i++;
     }
-    if (buf.length) html += '<p>'+inline(buf.join(' '))+'</p>';
+    if (buf.length) html += '<p>'+inline(buf.join('<br>'))+'</p>';
     // 블록 문법처럼 보이나 미완성인 줄(예: 구분선 없는 표 행 `| x |`)은 위 단락 루프가 건너뛴다.
     // 그대로 두면 i 가 안 늘어 무한 루프 → 화면 백지. 단락으로 흘리고 전진시킨다.
     else { html += '<p>'+inline(line)+'</p>'; i++; }
