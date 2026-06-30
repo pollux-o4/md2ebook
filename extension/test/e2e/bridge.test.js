@@ -38,8 +38,6 @@ test('checkbox click posts toggleTask message', async () => {
   await page.evaluate(() => {
     document.querySelector('input[type=checkbox][data-task-idx="0"]').click();
   });
-  // 잠시 대기 (이벤트 핸들러 동기)
-  await page.evaluate(() => new Promise(r => setTimeout(r, 50)));
   const posted = await page.evaluate(() => window.__posted);
   const msg = posted.find(m => m.command === 'toggleTask');
   assert.ok(msg, 'toggleTask 메시지가 없음');
@@ -54,7 +52,6 @@ test('theme swatch click posts saveConfig', async () => {
   await page.evaluate(() => {
     document.querySelector('[data-theme="sepia"]').click();
   });
-  await page.evaluate(() => new Promise(r => setTimeout(r, 50)));
   const posted = await page.evaluate(() => window.__posted);
   const msg = posted.find(m => m.command === 'saveConfig');
   assert.ok(msg, 'saveConfig 메시지가 없음');
@@ -97,7 +94,6 @@ test('scrollmode class follows flip setting', async () => {
   // scroll 모드로 전환
   await page.waitForFunction(() => document.querySelector('[data-flip="scroll"]') !== null);
   await page.evaluate(() => document.querySelector('[data-flip="scroll"]').click());
-  await page.evaluate(() => new Promise(r => setTimeout(r, 100)));
 
   const hasScrollAfter = await page.evaluate(() =>
     document.getElementById('reader').classList.contains('scrollmode')
@@ -106,7 +102,6 @@ test('scrollmode class follows flip setting', async () => {
 
   // flip3d로 복귀
   await page.evaluate(() => document.querySelector('[data-flip="flip3d"]').click());
-  await page.evaluate(() => new Promise(r => setTimeout(r, 100)));
 
   const hasScrollFinal = await page.evaluate(() =>
     document.getElementById('reader').classList.contains('scrollmode')

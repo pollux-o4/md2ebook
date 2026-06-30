@@ -44,7 +44,7 @@ test('ignores checkboxes inside fenced code blocks', () => {
   const r0 = toggleCheckbox(TASKS_MD, 0, true);
   assert.ok(r0.success);
   assert.ok(r0.updatedText.includes('- [x] real0'));
-  assert.ok(r0.updatedText.includes('- [ ] fakeInFence') || r0.updatedText.includes('fakeInFence'));
+  assert.ok(r0.updatedText.includes('- [ ] fakeInFence'));
 
   const r2 = toggleCheckbox(TASKS_MD, 2, true);
   assert.ok(r2.success);

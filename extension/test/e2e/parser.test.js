@@ -63,13 +63,17 @@ test('image with title preserved', async () => {
 
 test('semantic label chips render', async () => {
   const html = await parse(FIX('labels.md'));
-  assert.ok(html.includes('lbl fact') || html.includes('class="lbl'));
-  assert.ok(html.includes('사실') || html.includes('fact'));
+  assert.ok(html.includes('class="lbl fact"'), 'fact class missing');
+  assert.ok(html.includes('class="lbl guess"'), 'guess class missing');
+  assert.ok(html.includes('class="lbl op"'), 'op class missing');
+  assert.ok(html.includes('class="lbl none"'), 'none class missing');
 });
 
 test('custom label auto chip with data-key', async () => {
   const html = await parse(FIX('labels.md'));
-  assert.ok(html.includes('중요') || html.includes('커스텀'));
+  assert.ok(html.includes('data-key="중요"'), 'data-key=중요 missing');
+  assert.ok(html.includes('data-key="커스텀"'), 'data-key=커스텀 missing');
+  assert.ok(html.includes('lbl auto'), 'auto class missing');
 });
 
 test('table renders thead and tbody', async () => {

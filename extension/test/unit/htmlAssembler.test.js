@@ -83,7 +83,9 @@ test('injects MD into book-md slot', () => {
 
 test('escapes </script> in MD', () => {
   const result = assemble({ templateHtml: TEMPLATE, markdownText: 'before</script>after', config: cfg, pathResolver: noop, mermaidUri: null, docName: 'D' });
-  assert.ok(result.includes('before<\\/script>after') || result.includes('before<\/script>after') || !result.includes('before</script>after'));
+  // htmlAssembler가 </script>를 <\/script>로 이스케이프해야 함
+  // JS 문자열에서 '\\/' = 실제 문자 \/
+  assert.ok(result.includes('before<\\/script>after'));
 });
 
 test('injects config/env/docName', () => {
@@ -119,4 +121,5 @@ test('docName special chars JSON-escaped', () => {
   const result = assemble({ templateHtml: TEMPLATE, markdownText: '# x', config: cfg, pathResolver: noop, mermaidUri: null, docName: 'a"b' });
   assert.ok(!result.includes('"a"b"'));
   assert.ok(result.includes('a') && result.includes('b'));
+  assert.ok(result.includes('"a\\"b"'), 'JSON-escaped docName not found');
 });
