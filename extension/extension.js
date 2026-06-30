@@ -65,6 +65,11 @@ function activate(context) {
             return panel.webview.asWebviewUri(vscode.Uri.file(absolutePath)).toString();
         };
 
+        const cm6Path = path.join(context.extensionPath, 'cm6-bundle.js');
+        const cm6Uri = fs.existsSync(cm6Path)
+            ? panel.webview.asWebviewUri(vscode.Uri.file(cm6Path)).toString()
+            : null;
+
         // 6. HTML 생성 헬퍼 함수
         function generateHtml(docText) {
             const needMermaid = /^`{3,}\s*mermaid\b/im.test(docText);
@@ -81,6 +86,7 @@ function activate(context) {
                 config: savedConfig,
                 pathResolver,
                 mermaidUri,
+                cm6Uri,
                 docName: path.basename(document.uri.fsPath).replace(/\.md$/i, '')
             });
         }
@@ -92,10 +98,12 @@ function activate(context) {
         const changeSubscription = vscode.workspace.onDidChangeTextDocument((e) => {
             if (e.document.uri.toString() === docUriString) {
                 // 문서 변경 시 웹뷰 프론트엔드로 변경된 마크다운 전달
-                const updatedMd = transformPaths(e.document.getText(), pathResolver);
+                const rawText = e.document.getText();
+                const updatedMd = transformPaths(rawText, pathResolver);
                 panel.webview.postMessage({
                     command: 'updateContent',
-                    markdown: updatedMd
+                    markdown: updatedMd,
+                    rawMarkdown: rawText
                 });
             }
         });
@@ -144,6 +152,26 @@ function activate(context) {
                             }
                         } catch (e) {
                             console.error('체크박스 상태 반영 실패:', e);
+                        }
+                    });
+                    await editQueue;
+                    break;
+
+                case 'editContent':
+                    editQueue = editQueue.then(async () => {
+                        try {
+                            const { markdown } = message;
+                            const edit = new vscode.WorkspaceEdit();
+                            const docText = document.getText();
+                            const fullRange = new vscode.Range(
+                                document.positionAt(0),
+                                document.positionAt(docText.length)
+                            );
+                            edit.replace(document.uri, fullRange, markdown);
+                            await vscode.workspace.applyEdit(edit);
+                            await document.save();
+                        } catch (e) {
+                            console.error('CM6 editContent 저장 실패:', e);
                         }
                     });
                     await editQueue;

@@ -109,3 +109,57 @@ test('scrollmode class follows flip setting', async () => {
   assert.strictEqual(hasScrollFinal, false);
   await page.close();
 });
+
+const CM6_MOCK = () => {
+  window.MD2EBOOK_CM6 = {
+    mount(container, options) {
+      const ta = document.createElement('textarea');
+      ta.setAttribute('data-mock-cm6', 'true');
+      ta.style.width = '100%';
+      ta.value = options.initialDoc || '';
+      container.appendChild(ta);
+      let _focused = false;
+      ta.addEventListener('focus',  () => { _focused = true; });
+      ta.addEventListener('blur',   () => { _focused = false; });
+      ta.addEventListener('input',  () => { if (options.onChange) options.onChange(ta.value); });
+      return {
+        hasFocus: () => _focused,
+        setDoc:   (md) => { if (ta.value !== md) ta.value = md; },
+        getDoc:   () => ta.value,
+        destroy:  () => ta.remove(),
+      };
+    }
+  };
+};
+
+test('CM6 mounts in scroll mode when MD2EBOOK_CM6 is available', async () => {
+  const page = await browser.newPage();
+  await page.addInitScript(VSCODE_MOCK);
+  await page.addInitScript(CM6_MOCK);
+  await page.goto(buildPage(FIX('doc-a.md'), { flip: 'scroll' }));
+  await page.waitForFunction(() => document.getElementById('docTitle') !== null);
+  const mounted = await page.evaluate(() =>
+    document.querySelector('#padBelow textarea[data-mock-cm6]') !== null
+  );
+  assert.ok(mounted, 'CM6 mock editor not mounted in padBelow');
+  await page.close();
+});
+
+test('CM6 unmounts when switching away from scroll mode', async () => {
+  const page = await browser.newPage();
+  await page.addInitScript(VSCODE_MOCK);
+  await page.addInitScript(CM6_MOCK);
+  await page.goto(buildPage(FIX('doc-a.md'), { flip: 'scroll' }));
+  await page.waitForFunction(() =>
+    document.querySelector('#padBelow textarea[data-mock-cm6]') !== null
+  );
+  await page.evaluate(() => document.querySelector('[data-flip="flip3d"]').click());
+  await page.waitForFunction(() =>
+    document.querySelector('#padBelow textarea[data-mock-cm6]') === null
+  );
+  const hasContent = await page.evaluate(() =>
+    document.querySelector('#padBelow').innerHTML.length > 0
+  );
+  assert.ok(hasContent, 'padBelow empty after flip3d switch');
+  await page.close();
+});

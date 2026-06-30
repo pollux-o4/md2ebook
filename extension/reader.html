@@ -731,6 +731,36 @@ function applyTasks(pad){
 }
 
 let pages = [];        // {html, headings:[{id,level,text}]}
+
+// --- CM6 라이브 에디터 ---
+let cm6Editor = null;
+let cm6Debounce = null;
+let currentRawMd = (window.IS_VSCODE_ENV && typeof window.VSCODE_RAW_MARKDOWN === 'string')
+  ? window.VSCODE_RAW_MARKDOWN
+  : rawMd;
+
+function mountCM6() {
+  if (!window.MD2EBOOK_CM6 || cm6Editor) return;
+  cm6Editor = window.MD2EBOOK_CM6.mount(padBelow, {
+    initialDoc: currentRawMd,
+    onChange: (markdown) => {
+      clearTimeout(cm6Debounce);
+      cm6Debounce = setTimeout(() => {
+        if (isVSCode && vscode) {
+          vscode.postMessage({ command: 'editContent', markdown });
+        }
+      }, 300);
+    }
+  });
+}
+
+function unmountCM6() {
+  if (!cm6Editor) return;
+  clearTimeout(cm6Debounce);
+  cm6Editor.destroy();
+  cm6Editor = null;
+}
+
 const headingPage = {}; // id -> page index
 let searchIndex = [];   // [{page, text}] — 페이지 분할과 무관한 전체 노드 검색 인덱스
 let srchQuery = '', srchHits = [], srchHI = 0, srchMarks = [], srchRenderedPage = -1, searchBarOpen = false;
@@ -825,9 +855,21 @@ let animating = false;
 function setHtml(pad, idx){ pad.innerHTML = (pages[idx] && pages[idx].html) || ''; pad.scrollTop = 0; applyTasks(pad); if (typeof initMermaidPanZoom === 'function') initMermaidPanZoom(pad); }
 
 function renderBase(){
-  // scroll 은 srcNodes(렌더된 mermaid 포함)에서 직접 — 캐시 문자열은 mermaid 렌더 전 상태라 안 씀
-  if (settings.flip === 'scroll'){ padBelow.innerHTML = srcNodes.map(n=>n.outerHTML).join(''); applyTasks(padBelow); if (typeof initMermaidPanZoom === 'function') initMermaidPanZoom(padBelow); observeScrollHeadings(); }
-  else { setHtml(padBelow, current); disconnectScrollObserver(); }
+  if (settings.flip === 'scroll'){
+    if (window.MD2EBOOK_CM6) {
+      if (!cm6Editor) mountCM6();
+      observeScrollHeadings();
+    } else {
+      padBelow.innerHTML = srcNodes.map(n=>n.outerHTML).join('');
+      applyTasks(padBelow);
+      if (typeof initMermaidPanZoom === 'function') initMermaidPanZoom(padBelow);
+      observeScrollHeadings();
+    }
+  } else {
+    unmountCM6();
+    setHtml(padBelow, current);
+    disconnectScrollObserver();
+  }
 }
 
 function observeScrollHeadings(){
@@ -1592,15 +1634,27 @@ if (isVSCode) {
     const message = event.data;
     if (message.command === 'updateContent') {
       const safeMd = message.markdown.replace(/<\\\/script>/g, '<\/script>');
+
+      if (typeof message.rawMarkdown === 'string') {
+        currentRawMd = message.rawMarkdown;
+      }
+
       const updatedHtml = parseMarkdown(safeMd);
       srcDoc.innerHTML = updatedHtml;
-      await renderMermaidIn(srcDoc);   // 캐시 덕에 안 바뀐 다이어그램은 즉시
+      await renderMermaidIn(srcDoc);
       srcNodes.length = 0;
       srcNodes.push(...srcDoc.children);
       const h1 = srcDoc.querySelector('h1');
-      const docTitle = h1 ? h1.textContent : (window.VSCODE_DOC_NAME || '책');
-      $('#docTitle').textContent = docTitle;
-      reflow();
+      const newTitle = h1 ? h1.textContent : (window.VSCODE_DOC_NAME || '책');
+      $('#docTitle').textContent = newTitle;
+
+      if (cm6Editor && settings.flip === 'scroll') {
+        if (!cm6Editor.hasFocus()) {
+          cm6Editor.setDoc(currentRawMd);
+        }
+      } else {
+        reflow();
+      }
     }
   });
 }

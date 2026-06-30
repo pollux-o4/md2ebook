@@ -123,3 +123,26 @@ test('docName special chars JSON-escaped', () => {
   assert.ok(result.includes('a') && result.includes('b'));
   assert.ok(result.includes('"a\\"b"'), 'JSON-escaped docName not found');
 });
+
+test('cm6 script injected when cm6Uri provided', () => {
+  const result = assemble({ templateHtml: TEMPLATE, markdownText: '# x', config: cfg, pathResolver: noop, mermaidUri: null, cm6Uri: 'cm6-bundle.js', docName: 'D' });
+  assert.ok(result.includes('<script src="cm6-bundle.js"></script>'), 'cm6 script tag missing');
+});
+
+test('no cm6 script when cm6Uri null', () => {
+  const result = assemble({ templateHtml: TEMPLATE, markdownText: '# x', config: cfg, pathResolver: noop, mermaidUri: null, cm6Uri: null, docName: 'D' });
+  assert.ok(!result.includes('cm6-bundle.js'), 'cm6 script should not be injected');
+});
+
+test('VSCODE_RAW_MARKDOWN contains original untransformed markdown', () => {
+  const result = assemble({
+    templateHtml: TEMPLATE,
+    markdownText: '![img](pic.png)',
+    config: cfg,
+    pathResolver: s => 'TRANSFORMED:' + s,
+    mermaidUri: null,
+    cm6Uri: null,
+    docName: 'D'
+  });
+  assert.ok(result.includes('pic.png'), 'original path missing from VSCODE_RAW_MARKDOWN');
+});

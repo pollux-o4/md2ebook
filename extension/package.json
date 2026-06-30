@@ -5,6 +5,7 @@
   "version": "1.2.2",
   "publisher": "pollux-o4",
   "icon": "images/icon.jpeg",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/pollux-o4/md2ebook.git"
@@ -18,6 +19,7 @@
   "activationEvents": [],
   "main": "./extension.js",
   "scripts": {
+    "build:cm6": "esbuild cm6-src.js --bundle --format=iife --global-name=MD2EBOOK_CM6 --outfile=cm6-bundle.js --platform=browser --minify",
     "test:unit": "node --test test/unit/*.test.js",
     "test:e2e": "node --test test/e2e/*.test.js",
     "test": "node --test test/unit/*.test.js test/e2e/*.test.js"
@@ -39,7 +41,16 @@
       ]
     }
   },
+  "dependencies": {
+    "@codemirror/state": "^6.4.0",
+    "@codemirror/view": "^6.31.0",
+    "@codemirror/lang-markdown": "^6.3.0",
+    "@codemirror/language": "^6.10.0",
+    "@codemirror/commands": "^6.6.0",
+    "@lezer/markdown": "^1.4.0"
+  },
   "devDependencies": {
+    "esbuild": "^0.24.0",
     "playwright-core": "^1.60.0"
   }
 }
