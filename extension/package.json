@@ -17,6 +17,11 @@
   ],
   "activationEvents": [],
   "main": "./extension.js",
+  "scripts": {
+    "test:unit": "node --test test/unit/*.test.js",
+    "test:e2e": "node --test test/e2e/*.test.js",
+    "test": "node --test test/unit/*.test.js test/e2e/*.test.js"
+  },
   "contributes": {
     "commands": [
       {
