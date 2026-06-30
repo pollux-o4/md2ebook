@@ -1162,7 +1162,8 @@ stage.addEventListener('click', e => {
 window.addEventListener('keydown', e => {
   if ((e.ctrlKey || e.metaKey) && (e.key === 'f' || e.key === 'F')){ e.preventDefault(); openSearch(); return; }
   if (e.key === 'Escape'){ if (searchBarOpen) closeSearch(); else closeSheets(); return; }
-  if (/^(INPUT|TEXTAREA)$/.test((document.activeElement||{}).tagName || '')) return;  // 입력 중엔 페이지 네비 무시
+  const ae = document.activeElement;
+  if (/^(INPUT|TEXTAREA)$/.test((ae||{}).tagName||'') || (ae && ae.contentEditable==='true')) return;  // 입력 중엔 페이지 네비 무시
   if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') { e.preventDefault(); go('next'); }
   else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); go('prev'); }
 });
@@ -1232,6 +1233,7 @@ function updateSearchCount(){
   $('#searchCount').textContent = srchHits.length ? (srchHI+1)+' / '+srchHits.length : (srchQuery ? '없음' : '');
 }
 function doSearch(raw){
+  if (cm6Editor) { srchHits=[]; srchMarks=[]; srchQuery=''; updateSearchCount(); return; }
   const q = (raw || '').trim().toLowerCase();
   srchQuery = q; srchHI = 0; srchRenderedPage = -1; srchHits = [];
   clearSearchMarks(padBelow); srchMarks = [];

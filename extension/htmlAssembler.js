@@ -57,7 +57,7 @@ function assemble({ templateHtml, markdownText, config, pathResolver, mermaidUri
             window.VSCODE_CONFIG = ${JSON.stringify(config)};
             window.IS_VSCODE_ENV = true;
             window.VSCODE_DOC_NAME = ${JSON.stringify(docName || '')};
-            window.VSCODE_RAW_MARKDOWN = ${JSON.stringify(markdownText)};
+            window.VSCODE_RAW_MARKDOWN = ${JSON.stringify(markdownText).replace(/<\/script>/g, '<\\/script>')};
         </script>
     `;
 
