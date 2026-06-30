@@ -2,7 +2,7 @@
   "name": "markdown-ebook-reader",
   "displayName": "Markdown eBook Reader",
   "description": "Read your Markdown files like a premium eBook directly inside VS Code.",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "publisher": "pollux-o4",
   "icon": "images/icon.jpeg",
   "repository": {

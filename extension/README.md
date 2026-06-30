@@ -2,7 +2,7 @@
 
 마크다운 파일을 VS Code 안에서 eBook처럼 읽을 수 있습니다.
 
-![preview](images/preview.png)
+![preview](https://raw.githubusercontent.com/pollux-o4/md2ebook/main/extension/images/preview.png)
 
 마크다운 프리뷰에서 지원하는 기능을 그대로 사용할 수 있습니다.
 체크박스, Mermaid 다이어그램, 표, 코드 블록, `Ctrl+F` 전체 검색.
@@ -44,7 +44,7 @@
 
 Read Markdown files like an eBook inside VS Code.
 
-![preview](images/preview.png)
+![preview](https://raw.githubusercontent.com/pollux-o4/md2ebook/main/extension/images/preview.png)
 
 Supports everything the standard Markdown preview does —
 checkboxes, Mermaid diagrams, tables, code blocks, and `Ctrl+F` full-text search.
