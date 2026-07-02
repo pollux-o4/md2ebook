@@ -39,7 +39,7 @@ function hasMermaid(markdownText) {
     return /^`{3,}\s*mermaid\b/im.test(markdownText);
 }
 
-function assemble({ templateHtml, markdownText, config, pathResolver, mermaidUri, docName }) {
+function assemble({ templateHtml, markdownText, config, pathResolver, mermaidUri, cm6Uri, docName }) {
     // 1. 이미지 및 리소스 상대 경로 치환
     const processedMarkdown = transformPaths(markdownText, pathResolver);
 
@@ -57,6 +57,7 @@ function assemble({ templateHtml, markdownText, config, pathResolver, mermaidUri
             window.VSCODE_CONFIG = ${JSON.stringify(config)};
             window.IS_VSCODE_ENV = true;
             window.VSCODE_DOC_NAME = ${JSON.stringify(docName || '')};
+            window.VSCODE_RAW_MARKDOWN = ${JSON.stringify(markdownText).replace(/<\/script>/g, '<\\/script>')};
         </script>
     `;
 
@@ -65,6 +66,9 @@ function assemble({ templateHtml, markdownText, config, pathResolver, mermaidUri
     if (mermaidUri && hasMermaid(markdownText)) {
         const tag = `<script src="${mermaidUri}"></script>`;
         head += tag;
+    }
+    if (cm6Uri) {
+        head += `<script src="${cm6Uri}"></script>`;
     }
     return result.replace('</head>', () => `${head}</head>`);
 }

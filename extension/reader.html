@@ -306,6 +306,24 @@ body{ font-family:var(--reader-font) !important; color:var(--ink) !important; ma
   opacity:0; transition:opacity .3s ease; white-space:nowrap; }
 .hint.show{ opacity:1; }
 
+.edit-toast{ position:fixed; left:50%; bottom:calc(74px + env(safe-area-inset-bottom));
+  transform:translateX(-50%); z-index:56;
+  background:var(--chrome); color:var(--chrome-ink);
+  border:1px solid var(--chrome-rule); border-radius:14px;
+  padding:13px 44px 13px 18px;
+  box-shadow:0 4px 24px rgba(0,0,0,.18);
+  opacity:0; transition:opacity .28s ease;
+  pointer-events:none; max-width:min(380px,90vw); }
+.edit-toast.show{ opacity:1; pointer-events:auto; }
+.edit-toast-title{ font-size:13.5px; font-weight:600; margin-bottom:4px; }
+.edit-toast-desc{ font-size:12.5px; color:var(--ink-soft); line-height:1.5; }
+.edit-toast-close{ position:absolute; top:10px; right:12px;
+  appearance:none; border:0; background:transparent;
+  color:var(--ink-soft); font-size:20px; line-height:1; cursor:pointer; padding:2px 5px;
+  border-radius:6px; }
+.edit-toast-close:hover{ color:var(--chrome-ink);
+  background:color-mix(in srgb,var(--chrome-ink) 10%,transparent); }
+
 @media (max-width:520px){
   .prog-track,.prog-meta{ width:84%; }
   .topbar .doc-title{ font-size:13.5px; }
@@ -436,6 +454,12 @@ body{ font-family:var(--reader-font) !important; color:var(--ink) !important; ma
 </aside>
 
 <div class="hint" id="hint">좌우를 탭하거나 밀어서 넘기세요 · 가운데 탭으로 메뉴</div>
+
+<div class="edit-toast" id="editToast">
+  <div class="edit-toast-title">실시간 편집 활성화</div>
+  <div class="edit-toast-desc">텍스트를 클릭해 바로 수정할 수 있습니다.<br>변경 사항은 자동으로 저장됩니다.</div>
+  <button class="edit-toast-close" id="editToastClose" aria-label="닫기">&times;</button>
+</div>
 
 <script>
 /* =========================================================================
@@ -687,10 +711,8 @@ function load(k, d){
 }
 
 function save(k, v){
-  if (isVSCode && vscode) {
-    if (k === 'br-settings') {
-      vscode.postMessage({ command: 'saveConfig', config: v });
-    }
+  if (isVSCode && vscode && k === 'br-settings') {
+    vscode.postMessage({ command: 'saveConfig', config: v });
     return;
   }
   try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){}
@@ -731,6 +753,50 @@ function applyTasks(pad){
 }
 
 let pages = [];        // {html, headings:[{id,level,text}]}
+
+// --- CM6 라이브 에디터 ---
+let cm6Editor = null;
+let cm6Debounce = null;
+let currentRawMd = (window.IS_VSCODE_ENV && typeof window.VSCODE_RAW_MARKDOWN === 'string')
+  ? window.VSCODE_RAW_MARKDOWN
+  : rawMd;
+
+function mountCM6() {
+  if (!window.MD2EBOOK_CM6 || cm6Editor) return;
+  cm6Editor = window.MD2EBOOK_CM6.mount(padBelow, {
+    initialDoc: currentRawMd,
+    parseBlock: md => parseMarkdown(md),
+    onChange: (markdown) => {
+      clearTimeout(cm6Debounce);
+      cm6Debounce = setTimeout(() => {
+        if (isVSCode && vscode) {
+          vscode.postMessage({ command: 'editContent', markdown });
+        }
+      }, 300);
+    }
+  });
+}
+
+function unmountCM6() {
+  if (!cm6Editor) return;
+  clearTimeout(cm6Debounce);
+  cm6Editor.destroy();
+  cm6Editor = null;
+  $('#editToast').classList.remove('show');
+}
+
+function showEditToast() {
+  const toast = $('#editToast');
+  toast.classList.add('show');
+  let gone = false;
+  function dismiss() {
+    if (gone) return; gone = true;
+    toast.classList.remove('show');
+  }
+  $('#editToastClose').addEventListener('click', dismiss, { once: true });
+  setTimeout(dismiss, 7000);
+}
+
 const headingPage = {}; // id -> page index
 let searchIndex = [];   // [{page, text}] — 페이지 분할과 무관한 전체 노드 검색 인덱스
 let srchQuery = '', srchHits = [], srchHI = 0, srchMarks = [], srchRenderedPage = -1, searchBarOpen = false;
@@ -825,9 +891,28 @@ let animating = false;
 function setHtml(pad, idx){ pad.innerHTML = (pages[idx] && pages[idx].html) || ''; pad.scrollTop = 0; applyTasks(pad); if (typeof initMermaidPanZoom === 'function') initMermaidPanZoom(pad); }
 
 function renderBase(){
-  // scroll 은 srcNodes(렌더된 mermaid 포함)에서 직접 — 캐시 문자열은 mermaid 렌더 전 상태라 안 씀
-  if (settings.flip === 'scroll'){ padBelow.innerHTML = srcNodes.map(n=>n.outerHTML).join(''); applyTasks(padBelow); if (typeof initMermaidPanZoom === 'function') initMermaidPanZoom(padBelow); observeScrollHeadings(); }
-  else { setHtml(padBelow, current); disconnectScrollObserver(); }
+  if (settings.flip === 'scroll'){
+    if (window.MD2EBOOK_CM6) {
+      if (!cm6Editor) {
+        const prevH = padBelow.scrollHeight;
+        padBelow.innerHTML = '';
+        if (prevH) padBelow.style.minHeight = prevH + 'px';
+        mountCM6();
+        requestAnimationFrame(() => { padBelow.style.minHeight = ''; });
+        showEditToast();
+      }
+      observeScrollHeadings();
+    } else {
+      padBelow.innerHTML = srcNodes.map(n=>n.outerHTML).join('');
+      applyTasks(padBelow);
+      if (typeof initMermaidPanZoom === 'function') initMermaidPanZoom(padBelow);
+      observeScrollHeadings();
+    }
+  } else {
+    unmountCM6();
+    setHtml(padBelow, current);
+    disconnectScrollObserver();
+  }
 }
 
 function observeScrollHeadings(){
@@ -1120,7 +1205,8 @@ stage.addEventListener('click', e => {
 window.addEventListener('keydown', e => {
   if ((e.ctrlKey || e.metaKey) && (e.key === 'f' || e.key === 'F')){ e.preventDefault(); openSearch(); return; }
   if (e.key === 'Escape'){ if (searchBarOpen) closeSearch(); else closeSheets(); return; }
-  if (/^(INPUT|TEXTAREA)$/.test((document.activeElement||{}).tagName || '')) return;  // 입력 중엔 페이지 네비 무시
+  const ae = document.activeElement;
+  if (/^(INPUT|TEXTAREA)$/.test((ae||{}).tagName||'') || (ae && ae.contentEditable==='true')) return;  // 입력 중엔 페이지 네비 무시
   if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') { e.preventDefault(); go('next'); }
   else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); go('prev'); }
 });
@@ -1190,6 +1276,7 @@ function updateSearchCount(){
   $('#searchCount').textContent = srchHits.length ? (srchHI+1)+' / '+srchHits.length : (srchQuery ? '없음' : '');
 }
 function doSearch(raw){
+  if (cm6Editor) { srchHits=[]; srchMarks=[]; srchQuery=''; updateSearchCount(); return; }
   const q = (raw || '').trim().toLowerCase();
   srchQuery = q; srchHI = 0; srchRenderedPage = -1; srchHits = [];
   clearSearchMarks(padBelow); srchMarks = [];
@@ -1303,6 +1390,8 @@ function reflow(keepId){
   let anchor = keepId;
   if (!anchor && pages[current]) anchor = (pages[current].headings[0]||{}).id;
   paginate();
+  applyLabelStyle();
+  buildLabelControls();
   if (anchor && headingPage[anchor] !== undefined) current = headingPage[anchor];
   current = clamp(current);
   renderBase();
@@ -1566,10 +1655,10 @@ async function renderMermaidIn(container){
    ========================================================================= */
 async function boot(){
   applySettings();
-  applyLabelStyle();
-  buildLabelControls();
   await renderMermaidIn(srcDoc);
   paginate();
+  applyLabelStyle();
+  buildLabelControls();
   buildToc();
   current = clamp(load(docKey(STORE_POS), 0));
   renderBase();
@@ -1592,15 +1681,34 @@ if (isVSCode) {
     const message = event.data;
     if (message.command === 'updateContent') {
       const safeMd = message.markdown.replace(/<\\\/script>/g, '<\/script>');
+
+      if (typeof message.rawMarkdown === 'string') {
+        currentRawMd = message.rawMarkdown;
+      }
+
+      usedLabels.clear();
       const updatedHtml = parseMarkdown(safeMd);
       srcDoc.innerHTML = updatedHtml;
-      await renderMermaidIn(srcDoc);   // 캐시 덕에 안 바뀐 다이어그램은 즉시
+      await renderMermaidIn(srcDoc);
       srcNodes.length = 0;
       srcNodes.push(...srcDoc.children);
       const h1 = srcDoc.querySelector('h1');
-      const docTitle = h1 ? h1.textContent : (window.VSCODE_DOC_NAME || '책');
-      $('#docTitle').textContent = docTitle;
-      reflow();
+      const newTitle = h1 ? h1.textContent : (window.VSCODE_DOC_NAME || '책');
+      $('#docTitle').textContent = newTitle;
+
+      if (cm6Editor && settings.flip === 'scroll') {
+        if (!cm6Editor.hasFocus()) {
+          cm6Editor.setDoc(currentRawMd);
+        }
+        // 스크롤(편집) 모드에서는 reflow()(paginate·renderBase)를 건너뛰지만,
+        // usedLabels 는 위에서 clear→재파싱됐으므로 라벨 색 UI 를 반드시 갱신해야 한다.
+        // 안 하면 #setLabelRow(라벨 색 조절 섹션)가 안 떠, 편집 중 auto 라벨 색을
+        // 조절할 수 없다. reflow 안의 라벨 관련부(applyLabelStyle+buildLabelControls)만 호출.
+        applyLabelStyle();
+        buildLabelControls();
+      } else {
+        reflow();
+      }
     }
   });
 }

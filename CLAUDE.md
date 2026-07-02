@@ -36,3 +36,16 @@ gh release create vX.Y.Z extension/markdown-ebook-reader-X.Y.Z.vsix \
 - `extension/*.vsix` 는 `.gitignore` 에 포함 — git 추적 대상 아님, GitHub Release asset 으로만 배포
 - VS Code Marketplace 게시자: `pollux-o4` (marketplace.visualstudio.com/manage/publishers/pollux-o4)
 - Marketplace 배포 시 `npx @vscode/vsce publish` + Azure DevOps PAT 필요
+
+## 진행 중 작업 컨텍스트
+
+컨텍스트 압축 후 재개 시 아래 파일을 반드시 먼저 읽는다:
+
+- `extension/docs/context_live-edit.md` — 현재 상태·다음 할 일 (압축 후 여기서 시작)
+- `extension/docs/live-edit-handoff.md` — 결정 이유·실패 이력 (왜 그렇게 됐는지)
+
+## 수정·디버깅 원칙
+
+1. **변경 전에 흐름을 먼저 파악한다.** "다른 곳에서 처리될 것"이라는 가정은 검증 전까지 하지 않는다.
+2. **시작과 종료는 쌍이다.** 열었으면 닫고, 표시했으면 감추고, 등록했으면 해제한다. 타이머·GC 같은 자동 해제에만 의존하면 수명이 어긋날 때 깨진다.
+3. **테스트 실패 시 assert보다 전제조건을 먼저 의심한다.** 조건이 영영 참이 안 된다면 assertion 구문이 아닌 그 상태를 만드는 호출 체인을 역추적한다.
